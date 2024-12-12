@@ -12,6 +12,7 @@ class AudioManager: ObservableObject {
     private var timePitchNodes: [Int: AVAudioUnitTimePitch] = [:]
     private var buffers: [Int: AVAudioPCMBuffer] = [:]
     private var referenceStartTime: AVAudioTime?
+    private var cancellables = Set<AnyCancellable>()
 
     @Published var bpm: Double = 84.0 {
         didSet {
@@ -31,7 +32,47 @@ class AudioManager: ObservableObject {
         setupAudioSession()
         setupEngineNodes()
         startEngine()
+        observeAudioInterruptions()
     }
+    
+    private func observeAudioInterruptions() {
+            NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)
+                .sink { [weak self] notification in
+                    guard let userInfo = notification.userInfo,
+                          let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+                          let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+                    
+                    switch type {
+                    case .began:
+                        print("Audio interruption began")
+                        self?.handleInterruptionBegan()
+                    case .ended:
+                        print("Audio interruption ended")
+                        if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt,
+                           AVAudioSession.InterruptionOptions(rawValue: optionsValue).contains(.shouldResume) {
+                            self?.handleInterruptionEnded()
+                        }
+                    @unknown default:
+                        break
+                    }
+                }
+                .store(in: &cancellables)
+        }
+
+        private func handleInterruptionBegan() {
+            // Stop audio playback or take any necessary action
+            stopAllPlayers()
+        }
+
+        private func handleInterruptionEnded() {
+            do {
+                try AVAudioSession.sharedInstance().setActive(true)
+                startEngine()
+                restartAllPlayersWithAdjustedPhase() // Restart playback if needed
+            } catch {
+                print("Error resuming audio session: \(error.localizedDescription)")
+            }
+        }
     
     private func setupAudioSession() {
         do {
