@@ -32,47 +32,31 @@ class AudioManager: ObservableObject {
         setupAudioSession()
         setupEngineNodes()
         startEngine()
-        observeAudioInterruptions()
     }
     
-    private func observeAudioInterruptions() {
-            NotificationCenter.default.publisher(for: AVAudioSession.interruptionNotification)
-                .sink { [weak self] notification in
-                    guard let userInfo = notification.userInfo,
-                          let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
-                          let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
-                    
-                    switch type {
-                    case .began:
-                        print("Audio interruption began")
-                        self?.handleInterruptionBegan()
-                    case .ended:
-                        print("Audio interruption ended")
-                        if let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt,
-                           AVAudioSession.InterruptionOptions(rawValue: optionsValue).contains(.shouldResume) {
-                            self?.handleInterruptionEnded()
-                        }
-                    @unknown default:
-                        break
-                    }
-                }
-                .store(in: &cancellables)
+    func loopProgress(for sampleId: Int) -> Double {
+        guard let startTime = referenceStartTime,
+              let buffer = buffers[sampleId],
+              let renderTime = engine.outputNode.lastRenderTime else { return 0.0 }
+
+        // Ensure renderTime.hostTime is greater than or equal to startTime.hostTime
+        guard renderTime.hostTime >= startTime.hostTime else {
+            print("Invalid timing: renderTime.hostTime is less than startTime.hostTime.")
+            return 0.0
         }
 
-        private func handleInterruptionBegan() {
-            // Stop audio playback or take any necessary action
-            stopAllPlayers()
-        }
+        // Subtract startTime from renderTime safely
+        let elapsedHostTime = renderTime.hostTime - startTime.hostTime
+        var timebaseInfo = mach_timebase_info_data_t()
+        mach_timebase_info(&timebaseInfo)
 
-        private func handleInterruptionEnded() {
-            do {
-                try AVAudioSession.sharedInstance().setActive(true)
-                startEngine()
-                restartAllPlayersWithAdjustedPhase() // Restart playback if needed
-            } catch {
-                print("Error resuming audio session: \(error.localizedDescription)")
-            }
-        }
+        // Convert elapsed time to seconds
+        let elapsedSeconds = Double(elapsedHostTime) * Double(timebaseInfo.numer) / Double(timebaseInfo.denom) / Double(NSEC_PER_SEC)
+
+        // Calculate loop progress
+        let loopDuration = Double(buffer.frameLength) / buffer.format.sampleRate
+        return (elapsedSeconds.truncatingRemainder(dividingBy: loopDuration)) / loopDuration
+    }
     
     private func setupAudioSession() {
         do {
