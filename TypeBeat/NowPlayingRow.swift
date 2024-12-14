@@ -7,7 +7,7 @@ struct NowPlayingRow: View {
     let keyColor: Color
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 4) { // Reduce spacing between elements
             // Highlighted circle with consistent color
             Circle()
                 .fill(sample.keyColor())
@@ -17,6 +17,7 @@ struct NowPlayingRow: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.white)
                 )
+                .padding(8)
 
             Text(sample.title)
                 .font(.headline)
@@ -28,13 +29,14 @@ struct NowPlayingRow: View {
             Slider(value: $volume, in: 0...1)
                 .accentColor(sample.keyColor())
                 .frame(width: 150)
+                .padding(8)
         }
         .listRowSeparator(.hidden)
-        .padding(8) // Ensure padding matches the list style
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color(.systemGray6).opacity(0.4))
         )
+        .padding(.vertical, -4) // Reduce vertical padding
         .listRowBackground(Color.black.opacity(0.9)) // Match list background
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {

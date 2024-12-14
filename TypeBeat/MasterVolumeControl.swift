@@ -22,6 +22,7 @@ struct MasterVolumeControl: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.white)
                 )
+                .padding(8)
 
             Text("Master Volume")
                 .font(.headline)
@@ -35,12 +36,12 @@ struct MasterVolumeControl: View {
                 .onChange(of: masterVolume) { newValue, _ in
                     audioManager.setMasterVolume(newValue)
                 }
+                .padding(8)
         }
-        .padding( 8)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color(.systemGray6).opacity(0.4))
         )
-        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 }

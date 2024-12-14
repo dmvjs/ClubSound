@@ -510,8 +510,21 @@ let samples: [Sample] = [
 extension Sample {
     /// Returns a color associated with the sample's key.
     func keyColor() -> Color {
-        let palette: [Color] = [.red, .orange, .yellow, .green, .blue, .indigo, .purple, .pink]
-        return palette[key % palette.count]
+        let subduedColors: [Int: Color] = [
+            1: Color(red: 0.40, green: 0.20, blue: 0.50),  // Deep Purple
+            2: Color(red: 0.20, green: 0.40, blue: 0.60),  // Cool Blue
+            3: Color(red: 0.60, green: 0.20, blue: 0.30),  // Rich Maroon
+            4: Color(red: 0.70, green: 0.50, blue: 0.20),  // Golden Amber
+            5: Color(red: 0.80, green: 0.40, blue: 0.20),  // Burnt Orange
+            6: Color(red: 0.60, green: 0.20, blue: 0.20),  // Deep Red
+            7: Color(red: 0.20, green: 0.50, blue: 0.20),  // Forest Green
+            8: Color(red: 0.50, green: 0.50, blue: 0.20),  // Olive
+            9: Color(red: 0.20, green: 0.60, blue: 0.60),  // Teal Blue
+            10: Color(red: 0.30, green: 0.40, blue: 0.50), // Steel Blue
+            11: Color(red: 0.60, green: 0.40, blue: 0.50), // Dusty Rose
+            12: Color(red: 0.20, green: 0.20, blue: 0.50)  // Midnight Blue
+        ]
+        return subduedColors[key % 12] ?? Color.gray // Default to gray for undefined keys
     }
 
     /// Returns a gradient color associated with the sample's key for decorative purposes.

@@ -16,7 +16,6 @@ struct NowPlayingView: View {
                 VStack {
                     // Master Volume Control
                     MasterVolumeControl(masterVolume: $masterVolume, audioManager: audioManager)
-                        .padding(.top, 5)
                     NowPlayingList(
                         nowPlaying: $nowPlaying,
                         sampleVolumes: $sampleVolumes,
@@ -29,6 +28,5 @@ struct NowPlayingView: View {
         .frame(maxWidth: .infinity, alignment: .bottom)
         .background(Color.black.opacity(0.9))
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .padding(.vertical, 8)
     }
 }

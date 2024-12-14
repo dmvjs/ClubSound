@@ -33,7 +33,11 @@ struct NowPlayingList: View {
         }
         .listStyle(PlainListStyle())
         .frame(height: CGFloat(nowPlaying.count) * 72 + 40)
+        .frame(maxWidth: .infinity)
         .animation(.easeInOut, value: nowPlaying.count)
+        .ignoresSafeArea(edges: .horizontal)
+        .padding(.horizontal, -16)
+        .padding(.vertical, -10)
     }
 
 }

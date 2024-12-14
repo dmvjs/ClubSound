@@ -44,9 +44,7 @@ struct IndexView: View {
         .shadow(color: .black.opacity(0.3), radius: 3, x: 0, y: 2)
     }
 
-    // Helper to get the key color dynamically
     private func keyColor(for key: Int) -> Color {
-        // Replace with actual logic to map keys to colors
-        Color(hue: Double(key % 12) / 12.0, saturation: 0.8, brightness: 0.9)
+        return Sample(id: 0, title: "", key: key, bpm: 0, fileName: "").keyColor()
     }
 }

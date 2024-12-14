@@ -11,7 +11,7 @@ struct SampleScrollView: View {
             ScrollViewReader { scrollProxy in
                 VStack(spacing: 0) {
                     ScrollView {
-                        VStack(spacing: 20) {
+                        VStack(spacing: 0) {
                             ForEach(groupedSamples, id: \.0) { (bpm, keyGroups) in
                                 VStack(alignment: .leading) {
                                     // BPM Header
@@ -39,7 +39,7 @@ struct SampleScrollView: View {
                                 }
                             }
                         }
-                        .padding(.bottom, geometry.safeAreaInsets.bottom + 80)
+                        .padding(.bottom, geometry.safeAreaInsets.bottom + 44)
                     }
                 }
             }
