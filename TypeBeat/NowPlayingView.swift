@@ -10,13 +10,13 @@ struct NowPlayingView: View {
 
     var body: some View {
         VStack {
-
             if nowPlaying.isEmpty {
                 EmptyView()
             } else {
                 VStack {
                     // Master Volume Control
                     MasterVolumeControl(masterVolume: $masterVolume, audioManager: audioManager)
+                        .padding(.top, 5)
                     NowPlayingList(
                         nowPlaying: $nowPlaying,
                         sampleVolumes: $sampleVolumes,

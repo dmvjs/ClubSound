@@ -31,14 +31,15 @@ struct ContentView: View {
                         // Tempo Button Row with dynamic safe area padding
                         TempoButtonRow(audioManager: audioManager)
                             .padding(.top, UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0)
-                        
+
                         // Sample Scroll View
                         SampleScrollView(
                             groupedSamples: groupedSamples,
                             addToNowPlaying: addToNowPlaying,
+                            removeFromNowPlaying: removeFromNowPlaying,
                             isInPlaylist: isInPlaylist
                         )
-                        
+
                         // Now Playing View
                         NowPlayingView(
                             proxy: proxy,
