@@ -7,7 +7,7 @@ struct NowPlayingRow: View {
     let keyColor: Color
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 8) {
             // Highlighted circle with consistent color
             Circle()
                 .fill(sample.keyColor())
@@ -27,7 +27,7 @@ struct NowPlayingRow: View {
             // Volume Slider
             Slider(value: $volume, in: 0...1)
                 .accentColor(sample.keyColor())
-                .frame(width: 100)
+                .frame(width: 150)
         }
         .listRowSeparator(.hidden)
         .padding(8) // Ensure padding matches the list style

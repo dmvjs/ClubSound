@@ -31,7 +31,7 @@ struct MasterVolumeControl: View {
 
             Slider(value: $masterVolume, in: 0...1)
                 .accentColor(.blue)
-                .frame(width: 100)
+                .frame(width: 150)
                 .onChange(of: masterVolume) { newValue, _ in
                     audioManager.setMasterVolume(newValue)
                 }

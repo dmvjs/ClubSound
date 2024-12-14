@@ -134,6 +134,22 @@ class AudioManager: ObservableObject {
     func setMasterVolume(_ volume: Float) {
         engine.mainMixerNode.outputVolume = volume
     }
+    
+    func muteAndFadeIn(_ player: AVAudioPlayerNode, fadeDuration: TimeInterval = 0.2) {
+        // Mute audio
+        player.volume = 0.0
+
+        // Gradually fade in the volume
+        let steps = 20
+        let fadeStepDuration = fadeDuration / Double(steps)
+        let fadeIncrement = 1.0 / Float(steps)
+
+        for step in 0...steps {
+            DispatchQueue.main.asyncAfter(deadline: .now() + fadeStepDuration * Double(step)) {
+                player.volume = Float(step) * fadeIncrement
+            }
+        }
+    }
 
     private func resetReferenceStartTimeToNearestBeat() {
         guard let referenceTime = referenceStartTime else { return }
@@ -162,12 +178,58 @@ class AudioManager: ObservableObject {
         }
         return startTime
     }
+    
+    func restartAllPlayersFromBeginning() {
+        guard !players.isEmpty else { return }
+
+        // Stop all players
+        stopAllPlayers()
+
+        // Reset reference start time to the current host time
+        referenceStartTime = AVAudioTime(hostTime: mach_absolute_time())
+
+        // Schedule all buffers to start from the beginning
+        for (sampleId, player) in players {
+            guard let buffer = buffers[sampleId] else { continue }
+
+            // Adjust playback rates for the new BPM
+            adjustPlaybackRates(for: samples.first { $0.id == sampleId }!)
+
+            // Schedule the buffer to start from the reference start time
+            player.scheduleBuffer(buffer, at: referenceStartTime, options: .loops, completionHandler: nil)
+        }
+
+        // Start all players simultaneously
+        for player in players.values {
+            player.play()
+        }
+    }
+
 
     private func initializeReferenceStartTimeIfNeeded() {
         if referenceStartTime == nil {
             referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(1.0))
         }
     }
+    
+    func togglePlayback() {
+        if engine.isRunning {
+            // Stop the engine
+            stopAllPlayers()
+            engine.stop()
+            isPlaying = false
+        } else {
+            // Restart the engine
+            do {
+                try engine.start()
+                restartAllPlayersFromBeginning()
+                isPlaying = true
+            } catch {
+                print("Failed to start engine: \(error)")
+            }
+        }
+    }
+
 
     func togglePitchLockWithoutRestart() {
         pitchLock.toggle()
@@ -188,21 +250,30 @@ class AudioManager: ObservableObject {
         }
     }
 
-    private func restartAllPlayersWithAdjustedPhase() {
-        guard referenceStartTime != nil else { return }
+    func restartAllPlayersWithAdjustedPhase() {
+        guard !players.isEmpty else { return }
         
+        // Stop all players
+        for player in players.values {
+            player.stop()
+        }
+        
+        // Reset reference start time
         resetReferenceStartTimeToNearestBeat()
         
+        // Recalculate start time
+        let newStartTime = calculatePreciseStartTime()
+        
+        // Restart all players with the same start time
         for (sampleId, player) in players {
-            if let buffer = buffers[sampleId], player.isPlaying {
-                adjustPlaybackRates(for: samples.first { $0.id == sampleId }!)
-                
-                let newStartTime = calculatePreciseStartTime()
-                
-                player.stop()
-                player.scheduleBuffer(buffer, at: newStartTime, options: .loops, completionHandler: nil)
-                player.play()
-            }
+            guard let buffer = buffers[sampleId] else { continue }
+            
+            // Adjust playback rates based on the new tempo
+            adjustPlaybackRates(for: samples.first { $0.id == sampleId }!)
+            
+            // Schedule buffer for playback at the new synchronized time
+            player.scheduleBuffer(buffer, at: newStartTime, options: .loops, completionHandler: nil)
+            player.play()
         }
     }
 

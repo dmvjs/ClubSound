@@ -1,41 +1,33 @@
 import SwiftUI
 
 struct BPMIndexView: View {
-    let bpmValues: [Double]
-    let activeBPM: Double?
-    let onSelect: (Double) -> Void
+    let groupedSamples: [(Double, [(Int, [Sample])])]
+    let activeBPM: Double? // Tracks the currently active BPM
+    let onSelection: (Double) -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
-            ForEach(bpmValues, id: \.self) { bpm in
+        VStack(spacing: 8) {
+            ForEach(groupedSamples, id: \.0) { (bpm, _) in
                 Button(action: {
-                    onSelect(bpm)
+                    onSelection(bpm)
                 }) {
                     Text("\(Int(bpm))")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(activeBPM == bpm ? .white : .gray)
-                        .frame(width: 50, height: 40)
+                        .font(.caption2)
+                        .foregroundColor(activeBPM == bpm ? .black : .white)
+                        .frame(width: 30, height: 30)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: activeBPM == bpm ? [Color.blue.opacity(0.6), Color.blue] : [Color.gray.opacity(0.1), Color.gray.opacity(0.2)]),
-                                        startPoint: .top,
-                                        endPoint: .bottom
-                                    )
-                                )
-                                .shadow(color: activeBPM == bpm ? Color.blue.opacity(0.4) : .clear, radius: 6, x: 0, y: 4)
+                            Circle()
+                                .fill(activeBPM == bpm ? Color.green : Color.blue)
+                                .shadow(color: activeBPM == bpm ? Color.green.opacity(0.5) : .blue.opacity(0.4), radius: 5, x: 0, y: 2)
                         )
                 }
-                .animation(.easeInOut, value: activeBPM)
             }
         }
+        .padding(6)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.black.opacity(0.8))
-                .shadow(color: .black.opacity(0.2), radius: 10, x: 0, y: 4)
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(0.6))
         )
-        .frame(width: 70)
+        .shadow(color: .black.opacity(0.3), radius: 3, x: 0, y: 2)
     }
 }
-

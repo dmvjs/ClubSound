@@ -26,31 +26,46 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
-                ZStack {
+                ZStack(alignment: .topTrailing) {
                     VStack(spacing: 0) {
+                        // Tempo Button Row with dynamic safe area padding
                         TempoButtonRow(audioManager: audioManager)
-                        SampleScrollView(proxy: proxy, groupedSamples: groupedSamples, addToNowPlaying: addToNowPlaying, isInPlaylist: isInPlaylist)
-                        NowPlayingView(proxy: proxy, nowPlaying: $nowPlaying, sampleVolumes: $sampleVolumes, masterVolume: $masterVolume, audioManager: audioManager, removeFromNowPlaying: removeFromNowPlaying)
+                            .padding(.top, UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0)
+                        
+                        // Sample Scroll View
+                        SampleScrollView(
+                            groupedSamples: groupedSamples,
+                            addToNowPlaying: addToNowPlaying,
+                            isInPlaylist: isInPlaylist
+                        )
+                        
+                        // Now Playing View
+                        NowPlayingView(
+                            proxy: proxy,
+                            nowPlaying: $nowPlaying,
+                            sampleVolumes: $sampleVolumes,
+                            masterVolume: $masterVolume,
+                            audioManager: audioManager,
+                            removeFromNowPlaying: removeFromNowPlaying
+                        )
                     }
                     .background(Color.black)
                     .edgesIgnoringSafeArea(.all)
 
-                    VStack {
-                        BPMIndexView(
-                            bpmValues: groupedSamples.map { $0.0 },
-                            activeBPM: activeBPM ?? 84,
-                            onSelect: { bpm in
-                                withAnimation {
-                                    proxy.scrollTo(bpm, anchor: .top)
-                                    activeBPM = bpm
-                                }
+                    // BPM Index View
+                    BPMIndexView(
+                        groupedSamples: groupedSamples,
+                        activeBPM: activeBPM,
+                        onSelection: { bpm in
+                            withAnimation {
+                                activeBPM = bpm
+                                proxy.scrollTo(bpm, anchor: .top)
                             }
-                        )
-                        .frame(width: 70)
-                        .padding(.trailing, 8)
-                        .offset(y: -UIScreen.main.bounds.height * 0.4 + 200)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                    )
+                    .frame(height: UIScreen.main.bounds.height * 0.5) // Compact height
+                    .padding(.top, 50) // Place it 50 points below the TempoButtonRow
+                    .padding(.trailing, 20) // Place it 20 points inward from the right edge
                 }
                 .onAppear {
                     initializeVolumes()
@@ -60,6 +75,7 @@ struct ContentView: View {
             }
         }
     }
+
 
     private func setupBackgroundAudio() {
         do {
