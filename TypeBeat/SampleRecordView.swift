@@ -15,7 +15,6 @@ struct SampleRecordView: View {
                 keyIndicator()
                 sampleInfo()
                 Spacer()
-                bpmIndicator()
             }
             .padding(.vertical, 8)
             .padding(.horizontal, 12)
@@ -40,7 +39,7 @@ struct SampleRecordView: View {
             .fill(sample.keyColor()) // Use the existing keyColor method
             .frame(width: 24, height: 24)
             .overlay(
-                Text("\(sample.key)")
+                Text("\(getKeyName(for: sample.key))")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white)
             )
@@ -53,24 +52,16 @@ struct SampleRecordView: View {
             .lineLimit(2)
     }
 
-    private func bpmIndicator() -> some View {
-        Text("\(sample.bpm, specifier: "%.0f") BPM")
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(sample.keyColor())
-            )
-    }
-
-    private func keyGradientColors(_ key: Int, intensity: Double) -> [Color] {
+    private func keyGradientColors(_ key: MusicKey, intensity: Double) -> [Color] {
         let baseColor = sample.keyColor()
         return [
             baseColor.opacity(intensity),
             baseColor.opacity(intensity - 0.2),
             baseColor.opacity(intensity - 0.4)
         ]
+    }
+
+    private func getKeyName(for key: MusicKey) -> String {
+        return key.name
     }
 }

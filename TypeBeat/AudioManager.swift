@@ -5,15 +5,7 @@ import Combine
 class AudioManager: ObservableObject {
     static let shared = AudioManager()
     
-    private let engine = AVAudioEngine()
-    private var players: [Int: AVAudioPlayerNode] = [:]
-    private var mixers: [Int: AVAudioMixerNode] = [:]
-    private var varispeedNodes: [Int: AVAudioUnitVarispeed] = [:]
-    private var timePitchNodes: [Int: AVAudioUnitTimePitch] = [:]
-    private var buffers: [Int: AVAudioPCMBuffer] = [:]
-    private var referenceStartTime: AVAudioTime?
-    private var cancellables = Set<AnyCancellable>()
-
+    @Published var activeSamples: Set<Int> = []
     @Published var bpm: Double = 84.0 {
         didSet {
             restartAllPlayersWithAdjustedPhase()
@@ -26,36 +18,46 @@ class AudioManager: ObservableObject {
         }
     }
 
-    @Published var isPlaying: Bool = true
+    @Published var isPlaying: Bool = false
+
+    private let engine = AVAudioEngine()
+    private var players: [Int: AVAudioPlayerNode] = [:]
+    private var mixers: [Int: AVAudioMixerNode] = [:]
+    private var varispeedNodes: [Int: AVAudioUnitVarispeed] = [:]
+    private var timePitchNodes: [Int: AVAudioUnitTimePitch] = [:]
+    private var buffers: [Int: AVAudioPCMBuffer] = [:]
+    private var referenceStartTime: AVAudioTime?
+    private var cancellables = Set<AnyCancellable>()
 
     private init() {
         setupAudioSession()
         setupEngineNodes()
         startEngine()
+        isPlaying = false
+        stopAllPlayers()  // Ensure players are actually stopped initially
     }
     
     func loopProgress(for sampleId: Int) -> Double {
         guard let startTime = referenceStartTime,
-              let buffer = buffers[sampleId],
               let renderTime = engine.outputNode.lastRenderTime else { return 0.0 }
 
-        // Ensure renderTime.hostTime is greater than or equal to startTime.hostTime
         guard renderTime.hostTime >= startTime.hostTime else {
             print("Invalid timing: renderTime.hostTime is less than startTime.hostTime.")
             return 0.0
         }
 
-        // Subtract startTime from renderTime safely
         let elapsedHostTime = renderTime.hostTime - startTime.hostTime
         var timebaseInfo = mach_timebase_info_data_t()
         mach_timebase_info(&timebaseInfo)
 
-        // Convert elapsed time to seconds
         let elapsedSeconds = Double(elapsedHostTime) * Double(timebaseInfo.numer) / Double(timebaseInfo.denom) / Double(NSEC_PER_SEC)
 
-        // Calculate loop progress
-        let loopDuration = Double(buffer.frameLength) / buffer.format.sampleRate
-        return (elapsedSeconds.truncatingRemainder(dividingBy: loopDuration)) / loopDuration
+        // 16 bars * 4 beats per bar = 64 beats
+        let totalBeats = 16.0 * 4.0  // 64 beats
+        let totalDuration = (totalBeats * 60.0) / bpm
+        
+        let progress = (elapsedSeconds.truncatingRemainder(dividingBy: totalDuration)) / totalDuration
+        return progress
     }
     
     private func setupAudioSession() {
@@ -126,6 +128,8 @@ class AudioManager: ObservableObject {
             if isPlaying {
                 player.play()
             }
+
+            activeSamples.insert(sample.id)
         } catch {
             print("Error loading audio file: \(error.localizedDescription)")
         }
@@ -213,20 +217,18 @@ class AudioManager: ObservableObject {
     }
     
     func togglePlayback() {
-        if engine.isRunning {
-            // Stop the engine
-            stopAllPlayers()
-            engine.stop()
-            isPlaying = false
-        } else {
-            // Restart the engine
+        isPlaying.toggle()  // Toggle state first
+        if isPlaying {
             do {
                 try engine.start()
                 restartAllPlayersFromBeginning()
-                isPlaying = true
             } catch {
+                isPlaying = false  // Revert state if failed
                 print("Failed to start engine: \(error)")
             }
+        } else {
+            stopAllPlayers()
+            engine.stop()
         }
     }
 
@@ -298,6 +300,7 @@ class AudioManager: ObservableObject {
         varispeedNodes.removeValue(forKey: sample.id)
         timePitchNodes.removeValue(forKey: sample.id)
         buffers.removeValue(forKey: sample.id)
+        activeSamples.remove(sample.id)
     }
     
     func setVolume(for sample: Sample, volume: Float) {
@@ -324,9 +327,7 @@ class AudioManager: ObservableObject {
 
     private func stopAllPlayers() {
         for player in players.values {
-            if player.isPlaying {
-                player.stop()
-            }
+            player.stop()
         }
     }
     

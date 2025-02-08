@@ -17,7 +17,7 @@ struct SplashScreenView: View {
 
         var body: some View {
             if isActive {
-                ContentView() // Replace with your main app view
+                ContentView(audioManager: AudioManager.shared)
             } else {
                 ZStack {
                             // Background

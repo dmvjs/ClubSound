@@ -2,81 +2,109 @@ import SwiftUI
 import AVFoundation
 
 struct ContentView: View {
-    @ObservedObject var audioManager = AudioManager.shared
+    @ObservedObject var audioManager: AudioManager
     @State private var sampleVolumes: [Int: Float] = [:]
     @State private var nowPlaying: [Sample] = []
-    @State private var activeBPM: Double? // Tracks the currently visible BPM
+    @State private var activeBPM: Double? = 84  // Set initial BPM
+    @State private var activeKey: MusicKey? = .C  // Set initial key
     @StateObject private var wakeLockManager = WakeLockManager()
-
-    @State private var selectedSampleID: Int? // To track the currently selected sample
-    @State private var masterVolume: Float = 1.0 // Master volume control
+    @State private var masterVolume: Float = 0.69
 
     // Group samples by BPM and Key, sorted by tempo and key
-    private var groupedSamples: [(Double, [(Int, [Sample])])] {
+    private var groupedSamples: [(Double, [(MusicKey, [Sample])])] {
         let tempoGroups = Dictionary(grouping: samples) { $0.bpm }.sorted { $0.key < $1.key }
         return tempoGroups.map { (bpm, samples) in
-            let keyGroups = Dictionary(grouping: samples) { $0.key }.sorted { $0.key < $1.key }
-            return (bpm, keyGroups.map { ($0.key, $0.value.sorted { $0.title < $1.title }) })
+            let keyGroups = Dictionary(grouping: samples) { $0.key }.sorted { $0.key.rawValue < $1.key.rawValue }
+            return (bpm, keyGroups)
         }
     }
 
     private let minBPM: Double = 60.0
     private let maxBPM: Double = 120.0
+    private let keyColumnWidth: CGFloat = 48  // Width of key column + padding
 
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ZStack(alignment: .topTrailing) {
                     VStack(spacing: 0) {
-                        // Tempo Button Row with dynamic safe area padding
-                        TempoButtonRow(audioManager: audioManager)
-                            .padding(.top, UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0)
+                        // Tempo Button Row at top
+                        HStack {
+                            Spacer()
+                            TempoButtonRow(audioManager: audioManager)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0)
+                        .padding(.trailing, keyColumnWidth)  // Account for key column width
 
-                        // Sample Scroll View
+                        // Sample list below
                         SampleScrollView(
                             groupedSamples: groupedSamples,
                             addToNowPlaying: addToNowPlaying,
                             removeFromNowPlaying: removeFromNowPlaying,
                             isInPlaylist: isInPlaylist
                         )
-
-                        // Now Playing View
-                        NowPlayingView(
-                            proxy: proxy,
-                            nowPlaying: $nowPlaying,
-                            sampleVolumes: $sampleVolumes,
-                            masterVolume: $masterVolume,
-                            audioManager: audioManager,
-                            removeFromNowPlaying: removeFromNowPlaying
-                        )
-                    }
-                    .background(Color.black)
-                    .edgesIgnoringSafeArea(.all)
-
-                    // BPM Index View
-                    BPMIndexView(
-                        groupedSamples: groupedSamples,
-                        activeBPM: activeBPM,
-                        onSelection: { bpm in
-                            withAnimation {
-                                activeBPM = bpm
-                                proxy.scrollTo(bpm, anchor: .top)
-                            }
+                        .padding(.top, 8)
+                        
+                        if !audioManager.activeSamples.isEmpty {
+                            NowPlayingView(
+                                nowPlaying: $nowPlaying,
+                                sampleVolumes: $sampleVolumes,
+                                masterVolume: $masterVolume,
+                                audioManager: audioManager,
+                                removeFromNowPlaying: removeFromNowPlaying
+                            )
                         }
-                    )
-                    .frame(height: UIScreen.main.bounds.height * 0.5) // Compact height
-                    .padding(.top, 50) // Place it 50 points below the TempoButtonRow
-                    .padding(.trailing, 20) // Place it 20 points inward from the right edge
+                    }
+
+                    // Fixed-height BPM and Key columns
+                    HStack(alignment: .top, spacing: 0) {
+                        BPMIndexView(
+                            groupedSamples: groupedSamples,
+                            activeBPM: activeBPM,
+                            onSelection: { bpm in
+                                activeBPM = bpm
+                                if let key = activeKey {
+                                    let scrollID = "\(Int(bpm))-\(key.rawValue)"
+                                    withAnimation {
+                                        proxy.scrollTo(scrollID, anchor: .top)
+                                    }
+                                } else {
+                                    let scrollID = "\(Int(bpm))"
+                                    withAnimation {
+                                        proxy.scrollTo(scrollID, anchor: .top)
+                                    }
+                                }
+                            }
+                        )
+                        .frame(height: UIScreen.main.bounds.height * 0.33)
+                        .padding(.top, -UIScreen.main.bounds.height * 0.025)
+                        
+                        KeyIndexView(
+                            groupedSamples: groupedSamples,
+                            activeKey: activeKey,
+                            activeBPM: activeBPM,
+                            onSelection: { key in
+                                activeKey = key
+                                if let bpm = activeBPM {
+                                    let scrollID = "\(Int(bpm))-\(key.rawValue)"
+                                    withAnimation {
+                                        proxy.scrollTo(scrollID, anchor: .top)
+                                    }
+                                }
+                            }
+                        )
+                        .frame(height: UIScreen.main.bounds.height * 0.33)
+                        .frame(width: keyColumnWidth)
+                    }
+                    .padding(.trailing, 6)
+                    .padding(.top, maxButtonSize + 20)
+                    .zIndex(1)
                 }
-                .onAppear {
-                    initializeVolumes()
-                    selectInitialBPM(proxy: proxy)
-                    setupBackgroundAudio()
-                }
+                .background(Color.black)
             }
         }
     }
-
 
     private func setupBackgroundAudio() {
         do {
@@ -87,7 +115,7 @@ struct ContentView: View {
         }
     }
 
-    private func selectInitialBPM(proxy: ScrollViewProxy) {
+    private func selectInitialBPM() {
         if activeBPM == nil {
             activeBPM = 84
         }
@@ -97,6 +125,7 @@ struct ContentView: View {
         for sample in samples {
             sampleVolumes[sample.id] = 0.0
         }
+        audioManager.setMasterVolume(masterVolume)  // Set initial master volume
     }
 
     private func addToNowPlaying(sample: Sample) {
@@ -119,4 +148,28 @@ struct ContentView: View {
     private func isInPlaylist(_ sample: Sample) -> Bool {
         nowPlaying.contains(where: { $0.id == sample.id })
     }
+
+    func loopProgress(for sampleId: Int) -> Double {
+        audioManager.loopProgress(for: sampleId)
+    }
+
+    private func handleBPMSelection(_ bpm: Double) {
+        activeBPM = bpm
+        // Add haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+    }
+    
+    private func handleKeySelection(_ key: MusicKey) {
+        activeKey = key
+        // Add haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+    }
+
+    private let maxButtonSize: CGFloat = 44
+}
+
+#Preview {
+    ContentView(audioManager: AudioManager.shared)
 }

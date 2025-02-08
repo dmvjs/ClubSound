@@ -1,26 +1,41 @@
 import SwiftUI
+import Combine
 
 struct NowPlayingRow: View {
     let sample: Sample
     @Binding var volume: Float
     let remove: () -> Void
     let keyColor: Color
+    @ObservedObject var audioManager: AudioManager
+
+    @State private var progress: Double = 0.0
+    @State private var timer: AnyCancellable?
 
     var body: some View {
-        HStack(spacing: 4) { // Reduce spacing between elements
-            // Highlighted circle with consistent color
-            Circle()
-                .fill(sample.keyColor())
-                .frame(width: 33, height: 33)
-                .overlay(
-                    Text("\(sample.bpm, specifier: "%.0f")")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                )
-                .padding(8)
+        HStack(spacing: 4) {
+            // Circle with progress ring
+            ZStack {
+                // Progress ring - now white with opacity
+                Circle()
+                    .trim(from: 0, to: CGFloat(progress))
+                    .stroke(Color.white.opacity(0.8), lineWidth: 3)  // Changed to white
+                    .rotationEffect(.degrees(-90))  // Start from top
+                
+                // Main circle (keeps original key color)
+                Circle()
+                    .fill(sample.keyColor())
+                    .frame(width: 33, height: 33)
+                    .overlay(
+                        Text("\(sample.bpm, specifier: "%.0f")")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                    )
+            }
+            .frame(width: 39, height: 39)  // Slightly larger to accommodate progress ring
+            .padding(5)
 
             Text(sample.title)
-                .font(.headline)
+                .font(.subheadline)
                 .foregroundColor(.white)
                 .lineLimit(2)
             Spacer()
@@ -30,6 +45,7 @@ struct NowPlayingRow: View {
                 .accentColor(sample.keyColor())
                 .frame(width: 150)
                 .padding(8)
+
         }
         .listRowSeparator(.hidden)
         .background(
@@ -44,6 +60,21 @@ struct NowPlayingRow: View {
             } label: {
                 Label("Remove", systemImage: "trash")
             }
+        }
+        .onAppear {
+            // Start the timer when the view appears
+            timer = Timer.publish(every: 0.1, on: .main, in: .common)
+                .autoconnect()
+                .sink { _ in
+                    let newProgress = audioManager.loopProgress(for: sample.id)
+                    withAnimation(.linear(duration: 0.1)) {
+                        self.progress = newProgress  // Now mutable
+                    }
+                }
+        }
+        .onDisappear {
+            // Invalidate the timer when the view disappears
+            timer?.cancel()
         }
     }
 }

@@ -27,17 +27,17 @@ struct NowPlayingList: View {
                         }
                     ),
                     remove: { removeFromNowPlaying(sample) },
-                    keyColor: sample.keyColor() // Use centralized color logic
+                    keyColor: sample.keyColor(),
+                    audioManager: audioManager
                 )
+                .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                .listRowSeparator(.hidden)
             }
         }
         .listStyle(PlainListStyle())
-        .frame(height: CGFloat(nowPlaying.count) * 72 + 40)
+        .frame(height: CGFloat(nowPlaying.count) * 60 + 10)
         .frame(maxWidth: .infinity)
         .animation(.easeInOut, value: nowPlaying.count)
         .ignoresSafeArea(edges: .horizontal)
-        .padding(.horizontal, -16)
-        .padding(.vertical, -10)
     }
-
 }

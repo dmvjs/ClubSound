@@ -1,7 +1,7 @@
 import SwiftUI
 struct IndexView: View {
-    let groupedSamples: [(Double, [(Int, [Sample])])]
-    let onSelection: (Double, Int?) -> Void
+    let groupedSamples: [(Double, [(MusicKey, [Sample])])]
+    let onSelection: (Double, MusicKey?) -> Void
 
     var body: some View {
         VStack(spacing: 6) {
@@ -26,11 +26,11 @@ struct IndexView: View {
                             Circle()
                                 .fill(keyColor(for: key))
                                 .overlay(
-                                    Text("\(key)")
+                                    Text(key.name)
                                         .font(.caption2)
                                         .foregroundColor(.white)
                                 )
-                                .frame(width: 15, height: 15) // Smaller for compactness
+                                .frame(width: 15, height: 15)
                         }
                     }
                 }
@@ -44,7 +44,7 @@ struct IndexView: View {
         .shadow(color: .black.opacity(0.3), radius: 3, x: 0, y: 2)
     }
 
-    private func keyColor(for key: Int) -> Color {
+    private func keyColor(for key: MusicKey) -> Color {
         return Sample(id: 0, title: "", key: key, bpm: 0, fileName: "").keyColor()
     }
 }

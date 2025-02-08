@@ -24,7 +24,7 @@ struct MasterVolumeControl: View {
                 )
                 .padding(8)
 
-            Text("Master Volume")
+            Text("Main")
                 .font(.headline)
                 .foregroundColor(.white)
                 .lineLimit(1)
@@ -42,6 +42,6 @@ struct MasterVolumeControl: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color(.systemGray6).opacity(0.4))
         )
-        .padding(.vertical, 8)
+        .padding(.top, 8)
     }
 }
