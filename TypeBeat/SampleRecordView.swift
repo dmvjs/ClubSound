@@ -13,7 +13,9 @@ struct SampleRecordView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .onTapGesture {
-                isInPlaylist ? onRemove() : onSelect()
+                if !isInPlaylist {
+                    onSelect()
+                }
             }
     }
 }

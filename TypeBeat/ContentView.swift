@@ -118,18 +118,13 @@ struct ContentView: View {
 
     private func addToNowPlaying(sample: Sample) {
         if nowPlaying.count < 4 && !nowPlaying.contains(where: { $0.id == sample.id }) {
-            // UI update on main thread
+            // Do everything on main thread for audio sync
             nowPlaying.append(sample)
             sampleVolumes[sample.id] = 0.0
-
-            // Audio operations on background thread
-            DispatchQueue.global(qos: .userInitiated).async {
-                audioManager.addSampleToPlay(sample)
-                DispatchQueue.main.async {
-                    // Force UI update
-                    audioManager.objectWillChange.send()
-                }
-            }
+            audioManager.addSampleToPlay(sample)
+            
+            // Force UI update
+            audioManager.objectWillChange.send()
         }
     }
 

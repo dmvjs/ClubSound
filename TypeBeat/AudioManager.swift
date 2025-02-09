@@ -151,16 +151,12 @@ class AudioManager: ObservableObject {
     }
     
     func loopProgress(for sampleId: Int) -> Double {
-        // Return 0 if not playing
         guard isPlaying else { return 0.0 }
         
         guard let startTime = referenceStartTime,
               let renderTime = engine.outputNode.lastRenderTime else { return 0.0 }
 
-        guard renderTime.hostTime >= startTime.hostTime else {
-            print("Invalid timing: renderTime.hostTime is less than startTime.hostTime.")
-            return 0.0
-        }
+        guard renderTime.hostTime >= startTime.hostTime else { return 0.0 }
 
         let elapsedHostTime = renderTime.hostTime - startTime.hostTime
         var timebaseInfo = mach_timebase_info_data_t()
@@ -168,12 +164,16 @@ class AudioManager: ObservableObject {
 
         let elapsedSeconds = Double(elapsedHostTime) * Double(timebaseInfo.numer) / Double(timebaseInfo.denom) / Double(NSEC_PER_SEC)
 
-        // 16 bars * 4 beats per bar = 64 beats
-        let totalBeats = 16.0 * 4.0  // 64 beats
-        let totalDuration = (totalBeats * 60.0) / bpm
+        // Calculate total duration for 16 bars at current BPM
+        let beatsPerBar = 4.0
+        let totalBars = 16.0
+        let totalBeats = totalBars * beatsPerBar
+        let secondsPerBeat = 60.0 / bpm
+        let totalDuration = totalBeats * secondsPerBeat
         
-        let progress = (elapsedSeconds.truncatingRemainder(dividingBy: totalDuration)) / totalDuration
-        return progress
+        // Calculate progress without the 0.1s adjustment
+        let progress = elapsedSeconds.truncatingRemainder(dividingBy: totalDuration) / totalDuration
+        return max(0.0, min(1.0, progress))
     }
     
     private func setupAudioSession() {
@@ -201,25 +201,44 @@ class AudioManager: ObservableObject {
         let currentSample = currentTime.sampleTime
         let samplesPerBeat = sampleRate * (60.0 / bpm)
         
-        // Convert to Double for calculation
-        let nextBeatSample = ceil(Double(currentSample) / samplesPerBeat) * samplesPerBeat
+        // Calculate next beat boundary with higher precision
+        let currentBeatPosition = Double(currentSample) / samplesPerBeat
+        let nextBeatNumber = ceil(currentBeatPosition)
+        let nextBeatSample = nextBeatNumber * samplesPerBeat
         
-        // Convert back to Int64 for AVAudioTime
+        // Calculate precise time until next beat
         let timeUntilNextBeat = Double(Int64(nextBeatSample) - currentSample) / sampleRate
         
-        // Add a small buffer for scheduling (2 ms)
-        let schedulingBuffer = 0.002
+        // Account for both output latency and minimum scheduling buffer
+        let minimumSchedulingBuffer = 0.008 // 8ms minimum scheduling buffer
+        let totalOffset = timeUntilNextBeat + minimumSchedulingBuffer - outputLatency
         
-        // Convert to host time
+        // Convert to host time with nanosecond precision
         let hostTimePerSecond = Double(NSEC_PER_SEC)
-        let futureHostTime = currentTime.hostTime + UInt64(hostTimePerSecond * (timeUntilNextBeat + schedulingBuffer - outputLatency))
+        let futureHostTime = currentTime.hostTime + UInt64(hostTimePerSecond * totalOffset)
         
         return AVAudioTime(hostTime: futureHostTime)
     }
     
-    func addSampleToPlay(_ sample: Sample) {
-        guard !activeSamples.contains(sample.id) else { return }
+    private func scheduleAudioWithPrecision(player: AVAudioPlayerNode, buffer: AVAudioPCMBuffer) {
+        // Use a simple future time for reliable scheduling
+        let currentTime = engine.outputNode.lastRenderTime ?? AVAudioTime(hostTime: mach_absolute_time())
+        let schedulingBuffer = 0.002 // 2ms minimum buffer
+        let startTime = AVAudioTime(hostTime: currentTime.hostTime + secondsToHostTime(schedulingBuffer))
         
+        // Update reference time if needed
+        if !isPlaying {
+            referenceStartTime = startTime
+        }
+        
+        // Schedule and play
+        player.scheduleBuffer(buffer, at: startTime, options: [.loops, .interruptsAtLoop])
+        if isPlaying {
+            player.play(at: startTime)
+        }
+    }
+    
+    func addSampleToPlay(_ sample: Sample) {
         let player = AVAudioPlayerNode()
         let mixer = AVAudioMixerNode()
         let varispeed = AVAudioUnitVarispeed()
@@ -243,46 +262,33 @@ class AudioManager: ObservableObject {
             try file.read(into: buffer)
             buffers[sample.id] = buffer
             
-            // Configure high quality nodes
-            timePitch.bypass = false
-            timePitch.overlap = 8.0  // Higher overlap for better quality pitch shifting
-            
-            varispeed.bypass = false
-            
-            // Use high quality format for all connections
-            let highQualityFormat = AVAudioFormat(standardFormatWithSampleRate: 48000,
-                                                 channels: 2)
-            
-            engine.connect(player, to: varispeed, format: highQualityFormat)
-            engine.connect(varispeed, to: timePitch, format: highQualityFormat)
-            engine.connect(timePitch, to: mixer, format: highQualityFormat)
-            engine.connect(mixer, to: engine.mainMixerNode, format: highQualityFormat)
+            engine.connect(player, to: varispeed, format: processingFormat)
+            engine.connect(varispeed, to: timePitch, format: processingFormat)
+            engine.connect(timePitch, to: mixer, format: processingFormat)
+            engine.connect(mixer, to: engine.mainMixerNode, format: processingFormat)
 
             players[sample.id] = player
             mixers[sample.id] = mixer
             varispeedNodes[sample.id] = varispeed
             timePitchNodes[sample.id] = timePitch
-            activeSamples.insert(sample.id)
 
             adjustPlaybackRates(for: sample)
             mixer.outputVolume = 0.0
 
-            // If this is our first sample while playing, establish reference time
-            if isPlaying && referenceStartTime == nil {
-                referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
+            if isPlaying {
+                // Use existing reference time for immediate playback
+                guard let currentRefTime = referenceStartTime else { return }
+                
+                // Schedule and play immediately
+                player.scheduleBuffer(buffer, at: currentRefTime, options: .loops)
+                player.play()  // Start playing right away
+            } else {
+                let startTime = calculatePreciseStartTime()
+                player.scheduleBuffer(buffer, at: startTime, options: .loops)
             }
 
-            // Always use reference time if playing
-            if isPlaying {
-                if let startTime = referenceStartTime {
-                    player.scheduleBuffer(buffer, at: startTime, options: [.loops, .interruptsAtLoop])
-                    player.play(at: startTime)
-                }
-            } else {
-                // If not playing, just schedule but don't play
-                if let startTime = referenceStartTime {
-                    player.scheduleBuffer(buffer, at: startTime, options: [.loops, .interruptsAtLoop])
-                }
+            DispatchQueue.main.async {
+                self.activeSamples.insert(sample.id)
             }
         } catch {
             print("Error loading audio file: \(error)")
@@ -293,6 +299,25 @@ class AudioManager: ObservableObject {
         engine.mainMixerNode.outputVolume = volume
     }
     
+    func togglePlayback() {
+        isPlaying.toggle()
+        
+        if isPlaying {
+            // Reset reference time when starting playback
+            referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
+            
+            // Start all players with the new reference time
+            for (sampleId, player) in players {
+                guard let buffer = buffers[sampleId] else { continue }
+                player.stop()  // Ensure clean state
+                player.scheduleBuffer(buffer, at: referenceStartTime!, options: .loops)
+                player.play()
+            }
+        } else {
+            stopAllPlayers()
+        }
+    }
+
     func muteAndFadeIn(_ player: AVAudioPlayerNode, fadeDuration: TimeInterval = 0.2) {
         // Mute audio
         player.volume = 0.0
@@ -333,28 +358,10 @@ class AudioManager: ObservableObject {
         }
     }
     
-    func togglePlayback() {
-        isPlaying.toggle()
-        if isPlaying {
-            // Establish new reference time when starting playback
-            referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
-            
-            // Restart all players with the same reference time
-            for (sampleId, player) in players {
-                guard let buffer = buffers[sampleId] else { continue }
-                player.stop()
-                if let startTime = referenceStartTime {
-                    player.scheduleBuffer(buffer, at: startTime, options: [.loops, .interruptsAtLoop])
-                    player.play(at: startTime)
-                }
-            }
-        } else {
-            stopAllPlayers()
-        }
-    }
-
     func togglePitchLockWithoutRestart() {
-        pitchLock.toggle()
+        DispatchQueue.main.async {
+            self.pitchLock.toggle()
+        }
         adjustPlaybackRatesAndKeepPhase()
     }
 
@@ -405,7 +412,11 @@ class AudioManager: ObservableObject {
         varispeedNodes.removeValue(forKey: sample.id)
         timePitchNodes.removeValue(forKey: sample.id)
         buffers.removeValue(forKey: sample.id)
-        activeSamples.remove(sample.id)
+        
+        // Update @Published property on main thread
+        DispatchQueue.main.async {
+            self.activeSamples.remove(sample.id)
+        }
     }
     
     func setVolume(for sample: Sample, volume: Float) {
@@ -455,10 +466,12 @@ class AudioManager: ObservableObject {
                 player.stop()
             }
         }
-        // Clear active samples
-        activeSamples.removeAll()
-        // Reset playback state
-        isPlaying = false
+        
+        DispatchQueue.main.async {
+            self.activeSamples.removeAll()
+            self.isPlaying = false
+        }
+        
         engine.stop()
         
         // Clear all players and buffers
@@ -505,14 +518,12 @@ class AudioManager: ObservableObject {
     }
 
     func updateBPM(to newBPM: Double) {
-        // Stop all playback temporarily
         let wasPlaying = isPlaying
         if wasPlaying {
             stopAllPlayers()
         }
         
-        // Update BPM
-        self.bpm = newBPM
+        bpm = newBPM  // Keep synchronous
         
         // Adjust rates for all samples
         for (sampleId, _) in players {
