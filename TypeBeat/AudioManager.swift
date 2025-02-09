@@ -19,6 +19,8 @@ class AudioManager: ObservableObject {
     }
 
     @Published var isPlaying: Bool = false
+    @Published var isEngineReady: Bool = false
+    private var initializationCompletion: (() -> Void)?
 
     private let engine = AVAudioEngine()
     private var players: [Int: AVAudioPlayerNode] = [:]
@@ -30,22 +32,117 @@ class AudioManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
-        setupAudioSession()
-        setupEngineNodes()
-        
+        // 1. Set up audio session first
         do {
-            // Initial start/stop cycle to initialize the engine
+            let audioSession = AVAudioSession.sharedInstance()
+            try audioSession.setCategory(.playback)
+            try audioSession.setActive(true)
+        } catch {
+            print("Failed to set up audio session: \(error)")
+            return
+        }
+        
+        // 2. Connect main mixer to output
+        engine.connect(engine.mainMixerNode, to: engine.outputNode, format: nil)
+        
+        // 3. Start engine
+        do {
             try engine.start()
-            engine.pause()  // Use pause instead of stop for smoother initialization
+        } catch {
+            print("Failed to start audio engine: \(error)")
+            return
+        }
+        
+        // 4. Initialize reference time
+        referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
+    }
+    
+    private func initializeEngine(completion: @escaping () -> Void) async {
+        do {
+            // Create a test sample with actual audio data
+            guard let testUrl = Bundle.main.url(forResource: "00000001-body", withExtension: "mp3") else {
+                print("Critical Error: Could not find initialization audio file")
+                return
+            }
             
-            // Now start the engine again but keep playback stopped
+            let testFile = try AVAudioFile(forReading: testUrl)
+            let format = testFile.processingFormat
+            let frameCount = AVAudioFrameCount(testFile.length)
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+                print("Critical Error: Could not create PCM buffer")
+                return
+            }
+            try testFile.read(into: buffer)
+            
+            // Create and configure test nodes with high-quality settings
+            let testPlayer = AVAudioPlayerNode()
+            let testMixer = AVAudioMixerNode()
+            let testVarispeed = AVAudioUnitVarispeed()
+            let testTimePitch = AVAudioUnitTimePitch()
+            
+            // Configure high-quality audio processing
+            testTimePitch.bypass = false
+            testTimePitch.overlap = 8.0  // Higher overlap for better quality
+            
+            // Attach all test nodes
+            [testPlayer, testMixer, testVarispeed, testTimePitch].forEach { node in
+                engine.attach(node)
+            }
+            
+            // Connect test nodes with explicit format
+            let highQualityFormat = AVAudioFormat(standardFormatWithSampleRate: 48000,
+                                                channels: 2)
+            
+            engine.connect(testPlayer, to: testVarispeed, format: format)
+            engine.connect(testVarispeed, to: testTimePitch, format: format)
+            engine.connect(testTimePitch, to: testMixer, format: format)
+            engine.connect(testMixer, to: engine.mainMixerNode, format: highQualityFormat)
+            
+            // Completely mute the test mixer
+            testMixer.outputVolume = 0.0
+            engine.mainMixerNode.outputVolume = 0.0  // Double ensure silence
+            
+            // Start engine with maximum quality settings
+            engine.prepare()
+            try engine.start()
+            
+            // Schedule and play test audio with precise timing
+            let playbackDuration = 0.5  // Longer test for thorough initialization
+            testPlayer.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
+            testPlayer.play()
+            
+            // Wait for initialization with high-precision timing
+            let initializationDuration = UInt32(playbackDuration * 1_000_000)
+            usleep(initializationDuration)
+            
+            // Proper cleanup sequence
+            testPlayer.stop()
+            engine.pause()
+            
+            // Detach nodes in reverse order of connection
+            [testTimePitch, testVarispeed, testMixer, testPlayer].forEach { node in
+                engine.detach(node)
+            }
+            
+            // Reset engine state
+            engine.reset()
+            
+            // Restore main mixer volume
+            engine.mainMixerNode.outputVolume = 1.0
+            
+            // Restart engine for normal operation
             try engine.start()
             initializeReferenceStartTimeIfNeeded()
+            
+            // Ensure we're on the main thread for the completion
+            await MainActor.run {
+                completion()
+            }
+            
         } catch {
-            print("Error starting audio engine: \(error)")
+            print("Critical Error during audio engine initialization: \(error.localizedDescription)")
+            // In a production app, you might want to show a user-facing error here
         }
-        isPlaying = false
-        stopAllPlayers()
     }
     
     func loopProgress(for sampleId: Int) -> Double {
@@ -93,28 +190,30 @@ class AudioManager: ObservableObject {
     }
     
     private func calculatePreciseStartTime() -> AVAudioTime {
-        initializeReferenceStartTimeIfNeeded()
-        guard let startTime = referenceStartTime else {
-            print("Reference start time not initialized! Using fallback time.")
-            let fallbackHostTime = mach_absolute_time()
-            return AVAudioTime(hostTime: fallbackHostTime)
-        }
-        
-        // Calculate the next beat boundary
-        let currentTime = AVAudioTime(hostTime: mach_absolute_time())
+        let outputLatency = engine.outputNode.presentationLatency
+        let currentTime = engine.outputNode.lastRenderTime ?? AVAudioTime(hostTime: mach_absolute_time())
         let sampleRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
-        let samplesPerBeat = (60.0 / bpm) * sampleRate
         let currentSample = currentTime.sampleTime
+        let samplesPerBeat = sampleRate * (60.0 / bpm)
+        
+        // Convert to Double for calculation
         let nextBeatSample = ceil(Double(currentSample) / samplesPerBeat) * samplesPerBeat
         
-        return AVAudioTime(sampleTime: Int64(nextBeatSample), atRate: sampleRate)
+        // Convert back to Int64 for AVAudioTime
+        let timeUntilNextBeat = Double(Int64(nextBeatSample) - currentSample) / sampleRate
+        
+        // Add a small buffer for scheduling (2 ms)
+        let schedulingBuffer = 0.002
+        
+        // Convert to host time
+        let hostTimePerSecond = Double(NSEC_PER_SEC)
+        let futureHostTime = currentTime.hostTime + UInt64(hostTimePerSecond * (timeUntilNextBeat + schedulingBuffer - outputLatency))
+        
+        return AVAudioTime(hostTime: futureHostTime)
     }
     
     func addSampleToPlay(_ sample: Sample) {
-        // If we're playing, use the existing reference time
-        if isPlaying && referenceStartTime == nil {
-            referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
-        }
+        guard !activeSamples.contains(sample.id) else { return }
         
         let player = AVAudioPlayerNode()
         let mixer = AVAudioMixerNode()
@@ -125,10 +224,8 @@ class AudioManager: ObservableObject {
         engine.attach(varispeed)
         engine.attach(timePitch)
         engine.attach(mixer)
-        
-        let filenameWithId = String(format: "%08d", sample.id) + "-body"
 
-        guard let url = Bundle.main.url(forResource: filenameWithId, withExtension: "mp3") else {
+        guard let url = Bundle.main.url(forResource: sample.fileName, withExtension: "mp3") else {
             print("Could not find file \(sample.fileName)")
             return
         }
@@ -137,19 +234,8 @@ class AudioManager: ObservableObject {
             let file = try AVAudioFile(forReading: url)
             let processingFormat = file.processingFormat
             let frameCount = AVAudioFrameCount(file.length)
-            
-            // Calculate expected frame count based on BPM and bars
-            let sampleRate = processingFormat.sampleRate
-            let expectedBeats = 16.0 * 4.0  // 16 bars * 4 beats per bar
-            let secondsPerBeat = 60.0 / sample.bpm
-            let expectedDuration = expectedBeats * secondsPerBeat
-            let expectedFrameCount = AVAudioFrameCount(expectedDuration * sampleRate)
-            
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: processingFormat, frameCapacity: expectedFrameCount) else { return }
-            
-            try file.read(into: buffer, frameCount: min(frameCount, expectedFrameCount))
-            buffer.frameLength = expectedFrameCount
-            
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: processingFormat, frameCapacity: frameCount) else { return }
+            try file.read(into: buffer)
             buffers[sample.id] = buffer
             
             engine.connect(player, to: varispeed, format: processingFormat)
@@ -161,18 +247,28 @@ class AudioManager: ObservableObject {
             mixers[sample.id] = mixer
             varispeedNodes[sample.id] = varispeed
             timePitchNodes[sample.id] = timePitch
+            activeSamples.insert(sample.id)
 
             adjustPlaybackRates(for: sample)
             mixer.outputVolume = 0.0
 
-            if let startTime = referenceStartTime {
-                player.scheduleBuffer(buffer, at: startTime, options: [.loops, .interruptsAtLoop])
-                if isPlaying {
-                    player.play(at: startTime)
-                }
+            // If this is our first sample while playing, establish reference time
+            if isPlaying && referenceStartTime == nil {
+                referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
             }
 
-            activeSamples.insert(sample.id)
+            // Always use reference time if playing
+            if isPlaying {
+                if let startTime = referenceStartTime {
+                    player.scheduleBuffer(buffer, at: startTime, options: [.loops, .interruptsAtLoop])
+                    player.play(at: startTime)
+                }
+            } else {
+                // If not playing, just schedule but don't play
+                if let startTime = referenceStartTime {
+                    player.scheduleBuffer(buffer, at: startTime, options: [.loops, .interruptsAtLoop])
+                }
+            }
         } catch {
             print("Error loading audio file: \(error)")
         }
@@ -225,25 +321,20 @@ class AudioManager: ObservableObject {
     func togglePlayback() {
         isPlaying.toggle()
         if isPlaying {
-            do {
-                try engine.start()
-                // Reset reference time when starting playback
-                referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
-                // Restart ALL players with the new reference time
-                for (sampleId, player) in players {
-                    if let buffer = buffers[sampleId] {
-                        player.stop()
-                        player.scheduleBuffer(buffer, at: referenceStartTime, options: [.loops, .interruptsAtLoop])
-                        player.play(at: referenceStartTime)
-                    }
+            // Establish new reference time when starting playback
+            referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
+            
+            // Restart all players with the same reference time
+            for (sampleId, player) in players {
+                guard let buffer = buffers[sampleId] else { continue }
+                player.stop()
+                if let startTime = referenceStartTime {
+                    player.scheduleBuffer(buffer, at: startTime, options: [.loops, .interruptsAtLoop])
+                    player.play(at: startTime)
                 }
-            } catch {
-                isPlaying = false
-                print("Failed to start engine: \(error)")
             }
         } else {
             stopAllPlayers()
-            engine.stop()
         }
     }
 
@@ -260,18 +351,12 @@ class AudioManager: ObservableObject {
         }
     }
 
-    func restartAllPlayersWithAdjustedPhase() {
-        guard !players.isEmpty else { return }
+    private func restartAllPlayersWithAdjustedPhase() {
+        let nextBeat = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
+        referenceStartTime = nextBeat
         
-        // Stop all players
-        for player in players.values {
-            player.stop()
-        }
+        stopAllPlayers()
         
-        // Reset reference time
-        referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
-        
-        // Restart all players with the same reference time
         for (sampleId, player) in players {
             guard let buffer = buffers[sampleId] else { continue }
             
@@ -279,10 +364,8 @@ class AudioManager: ObservableObject {
                 adjustPlaybackRates(for: sample)
             }
             
-            if let startTime = referenceStartTime {
-                player.scheduleBuffer(buffer, at: startTime, options: .loops)
-                player.play()
-            }
+            player.scheduleBuffer(buffer, at: nextBeat, options: [.loops, .interruptsAtLoop])
+            player.play(at: nextBeat)
         }
     }
 
@@ -424,6 +507,25 @@ class AudioManager: ObservableObject {
             referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
             restartAllPlayersWithAdjustedPhase()
         }
+    }
+
+    private func loadAudioFile(for sample: Sample) throws -> AVAudioPCMBuffer? {
+        guard let url = Bundle.main.url(forResource: sample.fileName, withExtension: "mp3") else {
+            print("Could not find audio file: \(sample.fileName)")
+            return nil
+        }
+        
+        let file = try AVAudioFile(forReading: url)
+        let format = file.processingFormat
+        let frameCount = AVAudioFrameCount(file.length)
+        
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            print("Could not create buffer for: \(sample.fileName)")
+            return nil
+        }
+        
+        try file.read(into: buffer)
+        return buffer
     }
 
 }

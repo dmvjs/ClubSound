@@ -33,7 +33,7 @@ struct ContentView: View {
                         Color.clear
                             .frame(height: maxButtonSize)
                             .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? 0 : (UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0))
-                        
+
                         // Rest of content
                         SampleScrollView(
                             groupedSamples: groupedSamples,
@@ -42,7 +42,7 @@ struct ContentView: View {
                             isInPlaylist: isInPlaylist
                         )
                         .padding(.top, 8)
-                        
+
                         if !audioManager.activeSamples.isEmpty {
                             NowPlayingView(
                                 nowPlaying: $nowPlaying,
@@ -65,7 +65,7 @@ struct ContentView: View {
                         )
                         .allowsHitTesting(true)
                         .zIndex(2)
-                        
+
                         KeyIndexView(
                             groupedSamples: groupedSamples,
                             activeKey: activeKey,
@@ -121,7 +121,7 @@ struct ContentView: View {
             // UI update on main thread
             nowPlaying.append(sample)
             sampleVolumes[sample.id] = 0.0
-            
+
             // Audio operations on background thread
             DispatchQueue.global(qos: .userInitiated).async {
                 audioManager.addSampleToPlay(sample)
@@ -139,7 +139,7 @@ struct ContentView: View {
             withAnimation {
                 nowPlaying.remove(at: index)
             }
-            
+
             // Audio operations on background thread
             DispatchQueue.global(qos: .userInitiated).async {
                 audioManager.removeSampleFromPlay(sample)
@@ -163,29 +163,29 @@ struct ContentView: View {
         withAnimation {
             // Update BPM first
             activeBPM = bpm
-            
+
             // If current key exists in new BPM, keep it and scroll there
             let keysForNewBPM = groupedSamples
                 .first(where: { $0.0 == bpm })?
                 .1
                 .map { $0.0 } ?? []
-                
+
             if let currentKey = activeKey, !keysForNewBPM.contains(currentKey) {
                 // If current key doesn't exist in new BPM, clear it
                 activeKey = nil
             }
-            
+
             // Scroll to BPM section
             proxy.scrollTo("\(Int(bpm))", anchor: .top)
         }
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
     }
-    
+
     private func handleKeySelection(_ key: MusicKey, _ proxy: ScrollViewProxy) {
         withAnimation {
             activeKey = key
-            
+
             // If we don't have a BPM selected, find first BPM that has this key
             if activeBPM == nil {
                 if let firstBPMWithKey = groupedSamples.first(where: { _, keyGroups in
@@ -194,7 +194,7 @@ struct ContentView: View {
                     activeBPM = firstBPMWithKey.0
                 }
             }
-            
+
             // Now scroll to the key section if we have a BPM
             if let bpm = activeBPM {
                 proxy.scrollTo("\(Int(bpm))-\(key.rawValue)", anchor: .top)

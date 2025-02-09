@@ -21,7 +21,8 @@ struct SampleScrollView: View {
                         ForEach(keyGroups, id: \.0) { key, samples in
                             VStack(alignment: .leading, spacing: 8) {
                                 keyHeader(for: key, samples: samples)
-                                samplesList(samples)
+                                    .background(Color.black)
+                                samplesList(samples.sorted(by: { $0.title < $1.title }))
                             }
                             .id("\(Int(bpm))-\(key.rawValue)")
                         }
@@ -52,7 +53,7 @@ struct SampleScrollView: View {
     }
     
     private func keyHeader(for key: MusicKey, samples: [Sample]) -> some View {
-        Text(key.name)
+        Text(key.localizedName)
             .font(.system(size: 12, weight: .heavy))
             .foregroundColor(keyColor(for: key))
             .frame(maxWidth: .infinity, alignment: .leading)
