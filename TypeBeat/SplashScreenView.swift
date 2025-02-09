@@ -44,6 +44,7 @@ struct SplashScreenView: View {
                                         scale = 1.0
                                     }
                                 }
+                                .accessibilityLabel("app.name".localized)
                         }
                         .transition(.opacity)
                         .onAppear {

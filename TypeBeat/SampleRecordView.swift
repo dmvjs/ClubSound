@@ -62,6 +62,6 @@ struct SampleRecordView: View {
     }
 
     private func getKeyName(for key: MusicKey) -> String {
-        return key.name
+        return key.localizedName
     }
 }

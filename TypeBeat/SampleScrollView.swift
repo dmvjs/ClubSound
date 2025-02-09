@@ -38,7 +38,7 @@ struct SampleScrollView: View {
     
     // MARK: - Header Views
     private func bpmHeader(bpm: Double) -> some View {
-        Text("\(Int(bpm)) BPM")
+        Text(String(format: "section.bpm".localized, Int(bpm)))
             .font(.title2.bold())
             .foregroundColor(.white)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -96,6 +96,12 @@ struct SampleScrollView: View {
     
     private func keyColor(for key: MusicKey) -> Color {
         Sample(id: 0, title: "", key: key, bpm: 0, fileName: "").keyColor()
+    }
+    
+    private func sectionHeader(bpm: Double, key: MusicKey) -> String {
+        let bpmText = "section.bpm".localized(with: Int(bpm))
+        let keyText = "section.key".localized(with: key.localizedName)
+        return "\(bpmText) - \(keyText)"
     }
 }
 

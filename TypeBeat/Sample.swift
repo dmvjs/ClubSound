@@ -11,10 +11,20 @@ import Foundation
 
 struct Sample: Identifiable {
     let id: Int
-    let title: String
+    private let _title: String
     let key: MusicKey
     let bpm: Double
     let fileName: String
+    
+    var title: String { _title }
+    
+    init(id: Int, title: String, key: MusicKey, bpm: Double, fileName: String) {
+        self.id = id
+        self._title = title
+        self.key = key
+        self.bpm = bpm
+        self.fileName = fileName
+    }
     
     func keyColor() -> Color {
         let subduedColors: [MusicKey: Color] = [

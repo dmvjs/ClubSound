@@ -3,7 +3,7 @@ import SwiftUI
 struct NowPlayingView: View {
     @Binding var nowPlaying: [Sample]
     @Binding var sampleVolumes: [Int: Float]
-    @Binding var masterVolume: Float
+    @Binding var mainVolume: Float
     @ObservedObject var audioManager: AudioManager
     let removeFromNowPlaying: (Sample) -> Void
 
@@ -13,7 +13,7 @@ struct NowPlayingView: View {
                 EmptyView()
             } else {
                 VStack(spacing: 0) {
-                    MasterVolumeControl(masterVolume: $masterVolume, audioManager: audioManager)
+                    MainVolumeControl(mainVolume: $mainVolume, audioManager: audioManager)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 4)
                     

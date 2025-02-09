@@ -6,22 +6,25 @@
 //
 
 
-enum MusicKey: Int, CaseIterable {
-    case C = 0
-    case CSharp = 1
-    case D = 2
-    case DSharp = 3
-    case E = 4
-    case F = 5
-    case FSharp = 6
-    case G = 7
-    case GSharp = 8
-    case A = 9
-    case ASharp = 10
-    case B = 11
+enum MusicKey: String, CaseIterable {
+    case C = "C"
+    case CSharp = "C#"
+    case D = "D"
+    case DSharp = "D#"
+    case E = "E"
+    case F = "F"
+    case FSharp = "F#"
+    case G = "G"
+    case GSharp = "G#"
+    case A = "A"
+    case ASharp = "A#"
+    case B = "B"
+    
+    var localizedName: String {
+        return "key.\(self.rawValue.lowercased().replacingOccurrences(of: "#", with: "sharp"))".localized
+    }
     
     var name: String {
-        let names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-        return names[rawValue]
+        return localizedName
     }
 }

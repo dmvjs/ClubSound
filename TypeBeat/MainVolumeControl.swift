@@ -1,5 +1,5 @@
 //
-//  MasterVolumeControl.swift
+//  MainVolumeControl.swift
 //  ClubSound
 //
 //  Created by Kirk Elliott on 12/6/24.
@@ -8,8 +8,8 @@
 
 import SwiftUI
 
-struct MasterVolumeControl: View {
-    @Binding var masterVolume: Float
+struct MainVolumeControl: View {
+    @Binding var mainVolume: Float
     @ObservedObject var audioManager: AudioManager
 
     var body: some View {
@@ -24,16 +24,16 @@ struct MasterVolumeControl: View {
                 )
                 .padding(8)
 
-            Text("Main")
-                .font(.headline)
+            Text("main.volume".localized)
+                .font(.subheadline)
                 .foregroundColor(.white)
                 .lineLimit(1)
             Spacer()
 
-            Slider(value: $masterVolume, in: 0...1)
+            Slider(value: $mainVolume, in: 0...1)
                 .accentColor(.blue)
                 .frame(width: 150)
-                .onChange(of: masterVolume) { newValue, _ in
+                .onChange(of: mainVolume) { newValue, _ in
                     audioManager.setMasterVolume(newValue)
                 }
                 .padding(8)

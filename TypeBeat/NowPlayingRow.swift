@@ -58,7 +58,7 @@ struct NowPlayingRow: View {
             Button(role: .destructive) {
                 remove()
             } label: {
-                Label("Remove", systemImage: "trash")
+                Label("action.remove".localized, systemImage: "trash")
             }
         }
         .onAppear {

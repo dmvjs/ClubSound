@@ -8,7 +8,7 @@ struct ContentView: View {
     @State private var activeBPM: Double? = 84  // Set initial BPM
     @State private var activeKey: MusicKey? = .C  // Set initial key
     @StateObject private var wakeLockManager = WakeLockManager()
-    @State private var masterVolume: Float = 0.69
+    @State private var mainVolume: Float = 0.69
 
     // Group samples by BPM and Key, sorted by tempo and key
     private var groupedSamples: [(Double, [(MusicKey, [Sample])])] {
@@ -50,7 +50,7 @@ struct ContentView: View {
                             NowPlayingView(
                                 nowPlaying: $nowPlaying,
                                 sampleVolumes: $sampleVolumes,
-                                masterVolume: $masterVolume,
+                                mainVolume: $mainVolume,
                                 audioManager: audioManager,
                                 removeFromNowPlaying: removeFromNowPlaying
                             )
@@ -125,7 +125,7 @@ struct ContentView: View {
         for sample in samples {
             sampleVolumes[sample.id] = 0.0
         }
-        audioManager.setMasterVolume(masterVolume)  // Set initial master volume
+        audioManager.setMasterVolume(mainVolume)  // Set initial master volume
     }
 
     private func addToNowPlaying(sample: Sample) {

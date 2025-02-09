@@ -10,7 +10,7 @@ struct KeyIndexView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(keys, id: \.self) { key in
+            ForEach(MusicKey.allCases, id: \.self) { key in
                 keyButton(for: key)
             }
         }
