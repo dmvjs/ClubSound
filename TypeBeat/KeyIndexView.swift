@@ -1,41 +1,42 @@
 import SwiftUI
+
 struct KeyIndexView: View {
     let groupedSamples: [(Double, [(MusicKey, [Sample])])]
     let activeKey: MusicKey?
     let activeBPM: Double?
     let onSelection: (MusicKey) -> Void
     
-    private let keys = MusicKey.allCases
-    private let keyNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+    // Fixed width for text and tap target
+    private let textWidth: CGFloat = 16
+    private let tapTargetWidth: CGFloat = 44
+    
+    @State private var selectedKey: MusicKey?
+    @State private var showingIndicator = false
     
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 2) {
             ForEach(MusicKey.allCases, id: \.self) { key in
-                keyButton(for: key)
+                Text(key.name)
+                    .font(.system(size: 11, weight: .semibold))
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .foregroundColor(activeKey == key ? key.color : key.color.opacity(0.5))
+                    .frame(width: textWidth)
+                    .frame(maxWidth: tapTargetWidth)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            onSelection(key)
+                        }
+                    }
             }
         }
-        .padding(6)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black.opacity(0.6))
-        )
-        .shadow(color: .black.opacity(0.3), radius: 3, x: 0, y: 2)
-        .frame(height: UIScreen.main.bounds.height * 0.33)
-        .padding(.top, 0)
+        .frame(width: tapTargetWidth)
     }
-    
-    private func keyButton(for key: MusicKey) -> some View {
-        Button(action: {
-            onSelection(key)
-        }) {
-            Text(key.name)
-                .font(.caption2)
-                .foregroundColor(activeKey == key ? .black : .white)
-                .frame(width: 36, height: 26)
-                .background(
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(activeKey == key ? Sample(id: 0, title: "", key: key, bpm: 0, fileName: "").keyColor() : Color.gray.opacity(0.3))
-                )
-        }
+}
+
+extension MusicKey {
+    var color: Color {
+        Sample(id: 0, title: "", key: self, bpm: 0, fileName: "").keyColor()
     }
 } 

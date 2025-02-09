@@ -2,39 +2,35 @@ import SwiftUI
 
 struct BPMIndexView: View {
     let groupedSamples: [(Double, [(MusicKey, [Sample])])]
-    let activeBPM: Double? // Tracks the currently active BPM
+    let activeBPM: Double?
     let onSelection: (Double) -> Void
-
+    
+    @State private var selectedBPM: Double?
+    @State private var showingIndicator = false
+    
+    // Fixed width for text and tap target
+    private let textWidth: CGFloat = 24
+    private let tapTargetWidth: CGFloat = 44
+    
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 2) {
             ForEach(groupedSamples, id: \.0) { bpm, _ in
-                bpmButton(for: bpm)
+                Text("\(Int(bpm))")
+                    .font(.system(size: 11, weight: .semibold))
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+                    .foregroundColor(activeBPM == bpm ? .white : .white.opacity(0.5))
+                    .frame(width: textWidth)
+                    .frame(maxWidth: tapTargetWidth)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeOut(duration: 0.2)) {
+                            onSelection(bpm)
+                        }
+                    }
             }
         }
-        .padding(6)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black.opacity(0.6))
-        )
-        .shadow(color: .black.opacity(0.3), radius: 3, x: 0, y: 2)
-    }
-    
-    private func bpmButton(for bpm: Double) -> some View {
-        Button(action: {
-            onSelection(bpm)
-        }) {
-            let isActive = activeBPM == bpm
-            let backgroundColor = isActive ? Color.green : Color.gray.opacity(0.3)
-            
-            Text("\(Int(bpm))")
-                .font(.caption2)
-                .foregroundColor(isActive ? .black : .white)
-                .frame(width: 36, height: 26)
-                .background(
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(backgroundColor)
-                )
-        }
+        .frame(width: tapTargetWidth)
     }
 }
 

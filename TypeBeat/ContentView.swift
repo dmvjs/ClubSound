@@ -58,7 +58,7 @@ struct ContentView: View {
                     }
 
                     // Fixed-height BPM and Key columns - adjusted top padding
-                    HStack(alignment: .top, spacing: 0) {
+                    VStack(alignment: .trailing, spacing: 8) {
                         BPMIndexView(
                             groupedSamples: groupedSamples,
                             activeBPM: activeBPM,
@@ -77,8 +77,6 @@ struct ContentView: View {
                                 }
                             }
                         )
-                        .frame(height: UIScreen.main.bounds.height * 0.33)
-                        .padding(.top, -UIScreen.main.bounds.height * 0.025)
                         
                         KeyIndexView(
                             groupedSamples: groupedSamples,
@@ -94,11 +92,9 @@ struct ContentView: View {
                                 }
                             }
                         )
-                        .frame(height: UIScreen.main.bounds.height * 0.33)
-                        .frame(width: keyColumnWidth)
                     }
                     .padding(.trailing, 6)
-                    .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? maxButtonSize - 20 : maxButtonSize + 20)
+                    .padding(.top, maxButtonSize)
                     .zIndex(1)
                 }
                 .background(Color.black)
