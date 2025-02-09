@@ -27,7 +27,7 @@ struct MainVolumeControl: View {
             Text("main.volume".localized)
                 .font(.subheadline)
                 .foregroundColor(.white)
-                .lineLimit(1)
+                .lineLimit(2)
             Spacer()
 
             Slider(value: $mainVolume, in: 0...1)

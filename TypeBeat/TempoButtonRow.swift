@@ -3,8 +3,9 @@ import SwiftUI
 struct TempoButtonRow: View {
     @ObservedObject var audioManager: AudioManager
     @StateObject private var wakeLockManager = WakeLockManager()
-    @State private var showingLanguageMenu = false
     @Environment(\.dismiss) private var dismiss
+    @State private var showingLanguageSelection = false
+    @State private var breatheScale: CGFloat = 1.0
     
     // Adjusted constants for better layout
     private let maxButtonSize: CGFloat = 56  // Increased from 52
@@ -14,7 +15,7 @@ struct TempoButtonRow: View {
     var body: some View {
         GeometryReader { geometry in
             let availableWidth = geometry.size.width - (horizontalPadding * 2)
-            let totalButtons = 9  // 5 control buttons + 4 tempo buttons
+            let totalButtons = 9
             let totalSpacing = minButtonSpacing * CGFloat(totalButtons - 1)
             let buttonSize = min(maxButtonSize, (availableWidth - totalSpacing) / CGFloat(totalButtons))
             
@@ -22,24 +23,30 @@ struct TempoButtonRow: View {
                 // Control buttons group
                 Group {
                     audioPickerButton(size: buttonSize)
-                    languageButton(size: buttonSize)
+                    playPauseButton(size: buttonSize)
                     pitchLockButton(size: buttonSize)
                     wakeLockButton(size: buttonSize)
-                    playPauseButton(size: buttonSize)
+                    languageButton(size: buttonSize)
                 }
                 
                 // Tempo buttons group
                 ForEach([69, 84, 94, 102], id: \.self) { bpm in
                     Button(action: {
-                        updateBPM(to: bpm)
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            audioManager.updateBPM(to: Double(bpm))
+                            DispatchQueue.main.async {
+                                // Force UI update using audioManager's objectWillChange
+                                audioManager.objectWillChange.send()
+                            }
+                        }
                     }) {
                         Text("\(bpm)")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(audioManager.bpm == Double(bpm) ? .white : .gray)
+                            .foregroundColor(audioManager.bpm == Double(bpm) ? .black : .gray)
                             .frame(width: 30, height: 30)
                             .background(
                                 Circle()
-                                    .fill(audioManager.bpm == Double(bpm) ? Color.blue : Color.clear)
+                                    .fill(audioManager.bpm == Double(bpm) ? Color.green : Color.clear)
                             )
                     }
                 }
@@ -47,39 +54,9 @@ struct TempoButtonRow: View {
             .padding(.horizontal, horizontalPadding)
             .frame(maxWidth: .infinity)
         }
-        .frame(height: maxButtonSize + 8)  // Increased height slightly
-        .confirmationDialog(
-            "Select Language",
-            isPresented: $showingLanguageMenu,
-            titleVisibility: .visible
-        ) {
-            Button("English") {
-                changeLanguage("en")
-            }
-            Button("Español") {
-                changeLanguage("es")
-            }
-            Button("Français") {
-                changeLanguage("fr")
-            }
-            Button("Deutsch") {
-                changeLanguage("de")
-            }
-            Button("日本語") {
-                changeLanguage("ja")
-            }
-            Button("한국어") {
-                changeLanguage("ko")
-            }
-            Button("中文") {
-                changeLanguage("zh")
-            }
-        }
-    }
-
-    private func updateBPM(to bpm: Int) {
-        withAnimation {
-            audioManager.updateBPM(to: Double(bpm))
+        .frame(height: maxButtonSize + 8)
+        .sheet(isPresented: $showingLanguageSelection) {
+            LanguageSelectionView()
         }
     }
 
@@ -105,43 +82,6 @@ struct TempoButtonRow: View {
             .frame(width: size, height: size)
             .background(Circle().fill(Color.blue))
             .shadow(color: .blue.opacity(0.4), radius: 8, x: 0, y: 4)
-    }
-
-    private func languageButton(size: CGFloat) -> some View {
-        Button(action: {
-            showingLanguageMenu = true
-        }) {
-            ZStack {
-                Circle()
-                    .fill(Color.blue)
-                
-                Image(systemName: "globe")
-                    .font(.system(size: size * 0.5))
-                    .foregroundColor(.white)
-            }
-            .frame(width: size, height: size)
-            .shadow(color: .blue.opacity(0.4), radius: 8, x: 0, y: 4)
-        }
-        .accessibilityLabel("language.select".localized)
-    }
-
-    private func changeLanguage(_ code: String) {
-        UserDefaults.standard.set(code, forKey: "AppLanguage")
-        UserDefaults.standard.synchronize()
-        
-        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = scene.windows.first {
-            let rootView = SplashScreenView()
-                .environment(\.locale, Locale(identifier: code))
-            
-            window.rootViewController = UIHostingController(rootView: rootView)
-            
-            UIView.transition(with: window,
-                            duration: 0.3,
-                            options: .transitionCrossDissolve,
-                            animations: nil,
-                            completion: nil)
-        }
     }
 
     private func pitchLockButton(size: CGFloat) -> some View {
@@ -197,9 +137,28 @@ struct TempoButtonRow: View {
                     .foregroundColor(audioManager.isPlaying ? .black : .white)
             }
             .frame(width: size, height: size)
+            .scaleEffect(audioManager.isPlaying ? 1.0 : breatheScale)
             .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         }
         .accessibilityLabel(audioManager.isPlaying ? "stop".localized : "play".localized)
         .animation(.easeInOut, value: audioManager.isPlaying)
+        .onAppear {
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                breatheScale = 1.1
+            }
+        }
+    }
+
+    private func languageButton(size: CGFloat) -> some View {
+        Button(action: {
+            // Just show the sheet without affecting audio state
+            showingLanguageSelection = true
+        }) {
+            Image(systemName: "globe")
+                .font(.system(size: size * 0.5))
+                .foregroundColor(.white)
+                .frame(width: size, height: size)
+                .background(Circle().fill(Color.gray.opacity(0.3)))
+        }
     }
 }

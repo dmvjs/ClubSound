@@ -14,7 +14,7 @@ class AudioManager: ObservableObject {
     
     @Published var pitchLock: Bool = false {
         didSet {
-            restartAllPlayersWithAdjustedPhase()
+            adjustPlaybackRatesAndKeepPhase()
         }
     }
 
@@ -107,6 +107,11 @@ class AudioManager: ObservableObject {
     }
     
     func addSampleToPlay(_ sample: Sample) {
+        // If we're playing, use the existing reference time
+        if isPlaying && referenceStartTime == nil {
+            referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
+        }
+        
         let player = AVAudioPlayerNode()
         let mixer = AVAudioMixerNode()
         let varispeed = AVAudioUnitVarispeed()
@@ -136,12 +141,10 @@ class AudioManager: ObservableObject {
             let expectedDuration = expectedBeats * secondsPerBeat
             let expectedFrameCount = AVAudioFrameCount(expectedDuration * sampleRate)
             
-            // Create buffer with exact expected size
             guard let buffer = AVAudioPCMBuffer(pcmFormat: processingFormat, frameCapacity: expectedFrameCount) else { return }
             
-            // Read only up to expected frame count
             try file.read(into: buffer, frameCount: min(frameCount, expectedFrameCount))
-            buffer.frameLength = expectedFrameCount  // Ensure exact length
+            buffer.frameLength = expectedFrameCount
             
             buffers[sample.id] = buffer
             
@@ -158,11 +161,10 @@ class AudioManager: ObservableObject {
             adjustPlaybackRates(for: sample)
             mixer.outputVolume = 0.0
 
-            // Use the shared reference time for all tracks
             if let startTime = referenceStartTime {
                 player.scheduleBuffer(buffer, at: startTime, options: [.loops, .interruptsAtLoop])
                 if isPlaying {
-                    player.play()
+                    player.play(at: startTime)
                 }
             }
 
@@ -223,7 +225,14 @@ class AudioManager: ObservableObject {
                 try engine.start()
                 // Reset reference time when starting playback
                 referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
-                restartAllPlayersWithAdjustedPhase()
+                // Restart ALL players with the new reference time
+                for (sampleId, player) in players {
+                    if let buffer = buffers[sampleId] {
+                        player.stop()
+                        player.scheduleBuffer(buffer, at: referenceStartTime, options: [.loops, .interruptsAtLoop])
+                        player.play(at: referenceStartTime)
+                    }
+                }
             } catch {
                 isPlaying = false
                 print("Failed to start engine: \(error)")
@@ -241,14 +250,8 @@ class AudioManager: ObservableObject {
 
     private func adjustPlaybackRatesAndKeepPhase() {
         for (sampleId, _) in players {
-            if let sample = samples.first(where: { $0.id == sampleId }),
-               let varispeed = varispeedNodes[sampleId] {
-                let rate = bpm / sample.bpm
-                if pitchLock {
-                    varispeed.rate = 1.0
-                } else {
-                    varispeed.rate = Float(rate)
-                }
+            if let sample = samples.first(where: { $0.id == sampleId }) {
+                adjustPlaybackRates(for: sample)
             }
         }
     }
