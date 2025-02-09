@@ -1,0 +1,54 @@
+// French Localization
+"play" = "Lecture";
+"stop" = "Arrêter";
+"lock_pitch" = "Verrouiller la Hauteur";
+"wake_lock" = "Garder Actif";
+"audio_output" = "Sortie";
+
+// BPM
+"bpm_format" = "%d TPM";
+
+// Musical Keys (French solfège)
+"key.c" = "Do";
+"key.csharp" = "Do♯";
+"key.d" = "Ré";
+"key.dsharp" = "Ré♯";
+"key.e" = "Mi";
+"key.f" = "Fa";
+"key.fsharp" = "Fa♯";
+"key.g" = "Sol";
+"key.gsharp" = "Sol♯";
+"key.a" = "La";
+"key.asharp" = "La♯";
+"key.b" = "Si";
+
+// Headers
+"header.key" = "Tonalité";
+"header.bpm" = "TPM";
+
+// Section Headers
+"section.bpm" = "Samples à %d TPM";
+"section.key" = "%@";
+
+// Audio
+"audio.output" = "Sortie Audio";
+"audio.main_volume" = "Volume Principal";
+
+// Language Selection
+"language.select" = "Choisir la Langue";
+"language.english" = "English";
+"language.spanish" = "Español";
+"language.french" = "Français";
+"language.german" = "Deutsch";
+"language.japanese" = "日本語";
+"language.korean" = "한국어";
+"language.chinese" = "中文";
+
+// Actions
+"action.remove" = "Supprimer";
+
+// Accessibility
+"language.button.accessibility" = "Changer de Langue";
+
+// Main Volume
+"main.volume" = "Volume principal"; 

@@ -1,0 +1,54 @@
+// German Localization
+"play" = "Abspielen";
+"stop" = "Stopp";
+"lock_pitch" = "Tonhöhe Sperren";
+"wake_lock" = "Wach Halten";
+"audio_output" = "Ausgang";
+
+// BPM
+"bpm_format" = "%d T/min";
+
+// Musical Keys (German notation)
+"key.c" = "C";
+"key.csharp" = "Cis";
+"key.d" = "D";
+"key.dsharp" = "Dis";
+"key.e" = "E";
+"key.f" = "F";
+"key.fsharp" = "Fis";
+"key.g" = "G";
+"key.gsharp" = "Gis";
+"key.a" = "A";
+"key.asharp" = "Ais";
+"key.b" = "H";
+
+// Headers
+"header.key" = "Tonart";
+"header.bpm" = "T/min";
+
+// Section Headers
+"section.bpm" = "%d T/min Samples";
+"section.key" = "%@";
+
+// Audio
+"audio.output" = "Audioausgang";
+"audio.main_volume" = "Hauptlautstärke";
+
+// Language Selection
+"language.select" = "Sprache Auswählen";
+"language.english" = "English";
+"language.spanish" = "Español";
+"language.french" = "Français";
+"language.german" = "Deutsch";
+"language.japanese" = "日本語";
+"language.korean" = "한국어";
+"language.chinese" = "中文";
+
+// Actions
+"action.remove" = "Entfernen";
+
+// Accessibility
+"language.button.accessibility" = "Sprache Ändern";
+
+// Main Volume
+"main.volume" = "Hauptlautstärke";

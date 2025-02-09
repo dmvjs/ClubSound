@@ -1,0 +1,48 @@
+// UI Controls
+"play" = "Play";
+"stop" = "Stop";
+"lock_pitch" = "Lock Pitch";
+"wake_lock" = "Wake Lock";
+"audio_output" = "Output";
+
+// BPM
+"bpm_format" = "%d BPM";
+
+// Musical Keys
+"key.c" = "C";
+"key.csharp" = "C#";
+"key.d" = "D";
+"key.dsharp" = "D#";
+"key.e" = "E";
+"key.f" = "F";
+"key.fsharp" = "F#";
+"key.g" = "G";
+"key.gsharp" = "G#";
+"key.a" = "A";
+"key.asharp" = "A#";
+"key.b" = "B";
+
+// Headers
+"header.key" = "Key";
+"header.bpm" = "BPM";
+
+// Section Headers
+"section.bpm" = "%d BPM";  // For sections like "84 BPM"
+"section.key" = "%@";      // For sections like "C#"
+
+// Audio
+"audio.output" = "Audio Output";
+"audio.main_volume" = "Main Volume";  // Changed from master_volume to main_volume 
+
+// Language Selection
+"language.select" = "Select Language";
+"language.english" = "English";
+"language.spanish" = "Español";
+"language.french" = "Français";
+"language.german" = "Deutsch";
+"language.japanese" = "日本語";
+"language.korean" = "한국어";
+"language.chinese" = "中文";
+
+// Main Volume
+"main.volume" = "Main Volume"; 

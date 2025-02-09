@@ -1,0 +1,54 @@
+// Spanish Localization
+"play" = "Reproducir";
+"stop" = "Detener";
+"lock_pitch" = "Bloquear Tono";
+"wake_lock" = "Mantener Activo";
+"audio_output" = "Salida";
+
+// BPM
+"bpm_format" = "%d PPM";
+
+// Musical Keys
+"key.c" = "Do";
+"key.csharp" = "Do#";
+"key.d" = "Re";
+"key.dsharp" = "Re#";
+"key.e" = "Mi";
+"key.f" = "Fa";
+"key.fsharp" = "Fa#";
+"key.g" = "Sol";
+"key.gsharp" = "Sol#";
+"key.a" = "La";
+"key.asharp" = "La#";
+"key.b" = "Si";
+
+// Headers
+"header.key" = "Tonalidad";
+"header.bpm" = "PPM";
+
+// Section Headers
+"section.bpm" = "Samples a %d PPM";
+"section.key" = "%@";
+
+// Audio
+"audio.output" = "Salida de Audio";
+"audio.main_volume" = "Volumen Principal";
+
+// Language Selection
+"language.select" = "Seleccionar Idioma";
+"language.english" = "English";
+"language.spanish" = "Español";
+"language.french" = "Français";
+"language.german" = "Deutsch";
+"language.japanese" = "日本語";
+"language.korean" = "한국어";
+"language.chinese" = "中文";
+
+// Actions
+"action.remove" = "Eliminar";
+
+// Accessibility
+"language.button.accessibility" = "Cambiar Idioma";
+
+// Main Volume
+"main.volume" = "Volumen principal"; 

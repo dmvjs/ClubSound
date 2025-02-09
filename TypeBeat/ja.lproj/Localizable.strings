@@ -1,0 +1,54 @@
+// Japanese Localization
+"play" = "再生";
+"stop" = "停止";
+"lock_pitch" = "ピッチロック";
+"wake_lock" = "画面ロック";
+"audio_output" = "出力";
+
+// BPM
+"bpm_format" = "%d 拍/分";
+
+// Musical Keys
+"key.c" = "ハ";
+"key.csharp" = "ハ#";
+"key.d" = "ニ";
+"key.dsharp" = "ニ#";
+"key.e" = "ホ";
+"key.f" = "ヘ";
+"key.fsharp" = "ヘ#";
+"key.g" = "ト";
+"key.gsharp" = "ト#";
+"key.a" = "イ";
+"key.asharp" = "イ#";
+"key.b" = "ロ";
+
+// Headers
+"header.key" = "調";
+"header.bpm" = "拍/分";
+
+// Section Headers
+"section.bpm" = "%d 拍/分のサンプル";
+"section.key" = "%@";
+
+// Audio
+"audio.output" = "オーディオ出力";
+"audio.main_volume" = "主音量";
+
+// Language Selection
+"language.select" = "言語を選択";
+"language.english" = "English";
+"language.spanish" = "Español";
+"language.french" = "Français";
+"language.german" = "Deutsch";
+"language.japanese" = "日本語";
+"language.korean" = "한국어";
+"language.chinese" = "中文";
+
+// Actions
+"action.remove" = "削除";
+
+// Accessibility
+"language.button.accessibility" = "言語を変更";
+
+// Main Volume
+"main.volume" = "メイン音量"; 

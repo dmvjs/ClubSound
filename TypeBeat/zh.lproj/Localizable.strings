@@ -1,0 +1,54 @@
+// Chinese Localization
+"play" = "播放";
+"stop" = "停止";
+"lock_pitch" = "锁定音高";
+"wake_lock" = "保持唤醒";
+"audio_output" = "输出";
+
+// BPM
+"bpm_format" = "%d 拍/分";
+
+// Musical Keys
+"key.c" = "C";
+"key.csharp" = "C#";
+"key.d" = "D";
+"key.dsharp" = "D#";
+"key.e" = "E";
+"key.f" = "F";
+"key.fsharp" = "F#";
+"key.g" = "G";
+"key.gsharp" = "G#";
+"key.a" = "A";
+"key.asharp" = "A#";
+"key.b" = "B";
+
+// Headers
+"header.key" = "调号";
+"header.bpm" = "拍/分";
+
+// Section Headers
+"section.bpm" = "%d 拍/分采样";
+"section.key" = "%@";
+
+// Audio
+"audio.output" = "音频输出";
+"audio.main_volume" = "主音量";
+
+// Language Selection
+"language.select" = "选择语言";
+"language.english" = "English";
+"language.spanish" = "Español";
+"language.french" = "Français";
+"language.german" = "Deutsch";
+"language.japanese" = "日本語";
+"language.korean" = "한국어";
+"language.chinese" = "中文";
+
+// Actions
+"action.remove" = "删除";
+
+// Accessibility
+"language.button.accessibility" = "更改语言";
+
+// Main Volume
+"main.volume" = "主音量"; 

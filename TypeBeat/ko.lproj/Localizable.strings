@@ -1,0 +1,54 @@
+// Korean Localization
+"play" = "재생";
+"stop" = "정지";
+"lock_pitch" = "피치 잠금";
+"wake_lock" = "화면 켜짐 유지";
+"audio_output" = "출력";
+
+// BPM
+"bpm_format" = "%d 박/분";
+
+// Musical Keys
+"key.c" = "다";
+"key.csharp" = "다#";
+"key.d" = "레";
+"key.dsharp" = "레#";
+"key.e" = "미";
+"key.f" = "파";
+"key.fsharp" = "파#";
+"key.g" = "솔";
+"key.gsharp" = "솔#";
+"key.a" = "라";
+"key.asharp" = "라#";
+"key.b" = "시";
+
+// Headers
+"header.key" = "키";
+"header.bpm" = "박/분";
+
+// Section Headers
+"section.bpm" = "%d 박/분 샘플";
+"section.key" = "%@";
+
+// Audio
+"audio.output" = "오디오 출력";
+"audio.main_volume" = "주 음량";
+
+// Language Selection
+"language.select" = "언어 선택";
+"language.english" = "English";
+"language.spanish" = "Español";
+"language.french" = "Français";
+"language.german" = "Deutsch";
+"language.japanese" = "日本語";
+"language.korean" = "한국어";
+"language.chinese" = "中文";
+
+// Actions
+"action.remove" = "제거";
+
+// Accessibility
+"language.button.accessibility" = "언어 변경";
+
+// Main Volume
+"main.volume" = "주 음량"; 
