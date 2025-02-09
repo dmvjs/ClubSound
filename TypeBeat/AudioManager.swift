@@ -34,14 +34,18 @@ class AudioManager: ObservableObject {
         setupEngineNodes()
         
         do {
+            // Initial start/stop cycle to initialize the engine
             try engine.start()
-            // Initialize reference time
+            engine.pause()  // Use pause instead of stop for smoother initialization
+            
+            // Now start the engine again but keep playback stopped
+            try engine.start()
             initializeReferenceStartTimeIfNeeded()
         } catch {
             print("Error starting audio engine: \(error)")
         }
         isPlaying = false
-        stopAllPlayers()  // Ensure players are actually stopped initially
+        stopAllPlayers()
     }
     
     func loopProgress(for sampleId: Int) -> Double {

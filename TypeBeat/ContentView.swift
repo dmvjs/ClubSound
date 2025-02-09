@@ -57,45 +57,32 @@ struct ContentView: View {
                         }
                     }
 
-                    // Fixed-height BPM and Key columns - adjusted top padding
+                    // Fixed-height BPM and Key columns
                     VStack(alignment: .trailing, spacing: 8) {
                         BPMIndexView(
                             groupedSamples: groupedSamples,
                             activeBPM: activeBPM,
                             onSelection: { bpm in
-                                activeBPM = bpm
-                                if let key = activeKey {
-                                    let scrollID = "\(Int(bpm))-\(key.rawValue)"
-                                    withAnimation {
-                                        proxy.scrollTo(scrollID, anchor: .top)
-                                    }
-                                } else {
-                                    let scrollID = "\(Int(bpm))"
-                                    withAnimation {
-                                        proxy.scrollTo(scrollID, anchor: .top)
-                                    }
-                                }
+                                handleBPMSelection(bpm, proxy)
                             }
                         )
+                        .allowsHitTesting(true)
+                        .zIndex(2)
                         
                         KeyIndexView(
                             groupedSamples: groupedSamples,
                             activeKey: activeKey,
                             activeBPM: activeBPM,
                             onSelection: { key in
-                                activeKey = key
-                                if let bpm = activeBPM {
-                                    let scrollID = "\(Int(bpm))-\(key.rawValue)"
-                                    withAnimation {
-                                        proxy.scrollTo(scrollID, anchor: .top)
-                                    }
-                                }
+                                handleKeySelection(key, proxy)
                             }
                         )
+                        .allowsHitTesting(true)
+                        .zIndex(2)
                     }
                     .padding(.trailing, 6)
                     .padding(.top, maxButtonSize)
-                    .zIndex(1)
+                    .zIndex(2)  // Ensure entire column stack stays above
                 }
                 .background(Color.black)
             }
@@ -167,16 +154,47 @@ struct ContentView: View {
         audioManager.loopProgress(for: sampleId)
     }
 
-    private func handleBPMSelection(_ bpm: Double) {
-        activeBPM = bpm
-        // Add haptic feedback
+    private func handleBPMSelection(_ bpm: Double, _ proxy: ScrollViewProxy) {
+        withAnimation {
+            // Update BPM first
+            activeBPM = bpm
+            
+            // If current key exists in new BPM, keep it and scroll there
+            let keysForNewBPM = groupedSamples
+                .first(where: { $0.0 == bpm })?
+                .1
+                .map { $0.0 } ?? []
+                
+            if let currentKey = activeKey, !keysForNewBPM.contains(currentKey) {
+                // If current key doesn't exist in new BPM, clear it
+                activeKey = nil
+            }
+            
+            // Scroll to BPM section
+            proxy.scrollTo("\(Int(bpm))", anchor: .top)
+        }
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
     }
     
-    private func handleKeySelection(_ key: MusicKey) {
-        activeKey = key
-        // Add haptic feedback
+    private func handleKeySelection(_ key: MusicKey, _ proxy: ScrollViewProxy) {
+        withAnimation {
+            activeKey = key
+            
+            // If we don't have a BPM selected, find first BPM that has this key
+            if activeBPM == nil {
+                if let firstBPMWithKey = groupedSamples.first(where: { _, keyGroups in
+                    keyGroups.contains { $0.0 == key }
+                }) {
+                    activeBPM = firstBPMWithKey.0
+                }
+            }
+            
+            // Now scroll to the key section if we have a BPM
+            if let bpm = activeBPM {
+                proxy.scrollTo("\(Int(bpm))-\(key.rawValue)", anchor: .top)
+            }
+        }
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
     }

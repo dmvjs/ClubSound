@@ -52,29 +52,12 @@ struct SampleScrollView: View {
     }
     
     private func keyHeader(for key: MusicKey, samples: [Sample]) -> some View {
-        Button(action: {
-            let availableSamples = samples.filter { !isInPlaylist($0) }
-            if let firstAvailable = availableSamples.first {
-                addToNowPlaying(firstAvailable)
-            }
-        }) {
-            HStack {
-                Text(key.name)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.white)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity)
+        Text(key.name)
+            .font(.system(size: 12, weight: .bold))
+            .foregroundColor(keyColor(for: key))
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-            .background(
-                keyColor(for: key)
-            )
-            .cornerRadius(4)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .contentShape(Rectangle())
-        .allowsHitTesting(true)
     }
     
     private func samplesList(_ samples: [Sample]) -> some View {
@@ -114,5 +97,40 @@ extension EnvironmentValues {
     var safeAreaInsets: EdgeInsets {
         get { self[SafeAreaInsetsKey.self] }
         set { self[SafeAreaInsetsKey.self] = newValue }
+    }
+}
+
+extension View {
+    func sticky(axis: Axis) -> some View {
+        StickyModifier(axis: axis, content: self)
+    }
+}
+
+struct StickyModifier<T: View>: View {
+    let axis: Axis
+    let content: T
+    
+    var body: some View {
+        content
+            .overlay(GeometryReader { proxy in
+                Color.clear.preference(
+                    key: StickyPreferenceKey.self,
+                    value: [StickyItem(id: proxy.frame(in: .named("scroll")).debugDescription, frame: proxy.frame(in: .named("scroll")), axis: axis)]
+                )
+            })
+    }
+}
+
+struct StickyItem: Equatable {
+    let id: String
+    let frame: CGRect
+    let axis: Axis
+}
+
+struct StickyPreferenceKey: PreferenceKey {
+    static var defaultValue: [StickyItem] = []
+    
+    static func reduce(value: inout [StickyItem], nextValue: () -> [StickyItem]) {
+        value.append(contentsOf: nextValue())
     }
 }
