@@ -276,12 +276,10 @@ class AudioManager: ObservableObject {
             mixer.outputVolume = 0.0
 
             if isPlaying {
-                // Use existing reference time for immediate playback
-                guard let currentRefTime = referenceStartTime else { return }
-                
-                // Schedule and play immediately
-                player.scheduleBuffer(buffer, at: currentRefTime, options: .loops)
-                player.play()  // Start playing right away
+                // Use the exact same reference time as all other players
+                guard let refTime = referenceStartTime else { return }
+                player.scheduleBuffer(buffer, at: refTime, options: .loops)
+                player.play()
             } else {
                 let startTime = calculatePreciseStartTime()
                 player.scheduleBuffer(buffer, at: startTime, options: .loops)
