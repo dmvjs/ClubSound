@@ -358,6 +358,13 @@ class AudioManager: ObservableObject {
         // Reset playback state
         isPlaying = false
         engine.stop()
+        
+        // Clear all players and buffers
+        players.removeAll()
+        mixers.removeAll()
+        varispeedNodes.removeAll()
+        timePitchNodes.removeAll()
+        buffers.removeAll()
     }
 
     private func monitorPhaseAlignment() {

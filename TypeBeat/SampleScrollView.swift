@@ -53,7 +53,7 @@ struct SampleScrollView: View {
     
     private func keyHeader(for key: MusicKey, samples: [Sample]) -> some View {
         Text(key.name)
-            .font(.system(size: 12, weight: .bold))
+            .font(.system(size: 12, weight: .heavy))
             .foregroundColor(keyColor(for: key))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)

@@ -27,17 +27,14 @@ struct ContentView: View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ZStack(alignment: .topTrailing) {
+                    // Base content
                     VStack(spacing: 0) {
-                        // Tempo Button Row at top - adjusted padding for Pro Max
-                        HStack {
-                            Spacer()
-                            TempoButtonRow(audioManager: audioManager)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? 0 : UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0)
-                        .padding(.trailing, keyColumnWidth)
-
-                        // Sample list below
+                        // Just a spacer for the top row's height
+                        Color.clear
+                            .frame(height: maxButtonSize)
+                            .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? 0 : (UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0))
+                        
+                        // Rest of content
                         SampleScrollView(
                             groupedSamples: groupedSamples,
                             addToNowPlaying: addToNowPlaying,
@@ -57,7 +54,7 @@ struct ContentView: View {
                         }
                     }
 
-                    // Fixed-height BPM and Key columns
+                    // Column buttons
                     VStack(alignment: .trailing, spacing: 8) {
                         BPMIndexView(
                             groupedSamples: groupedSamples,
@@ -81,8 +78,16 @@ struct ContentView: View {
                         .zIndex(2)
                     }
                     .padding(.trailing, 6)
-                    .padding(.top, maxButtonSize)
-                    .zIndex(2)  // Ensure entire column stack stays above
+                    .padding(.top, maxButtonSize + 24)
+
+                    // Top button row - now at ZStack level
+                    HStack {
+                        Spacer()
+                        TempoButtonRow(audioManager: audioManager)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? 0 : (UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0))
+                    .zIndex(2)
                 }
                 .background(Color.black)
             }

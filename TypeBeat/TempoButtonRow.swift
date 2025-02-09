@@ -35,26 +35,25 @@ struct TempoButtonRow: View {
                         DispatchQueue.global(qos: .userInitiated).async {
                             audioManager.updateBPM(to: Double(bpm))
                             DispatchQueue.main.async {
-                                // Force UI update using audioManager's objectWillChange
                                 audioManager.objectWillChange.send()
                             }
                         }
                     }) {
                         Text("\(bpm)")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(audioManager.bpm == Double(bpm) ? .black : .gray)
-                            .frame(width: 30, height: 30)
+                            .font(.system(size: buttonSize * 0.4))
+                            .foregroundColor(audioManager.bpm == Double(bpm) ? .black : .white)
+                            .frame(width: buttonSize, height: buttonSize)
                             .background(
                                 Circle()
-                                    .fill(audioManager.bpm == Double(bpm) ? Color.green : Color.clear)
+                                    .fill(audioManager.bpm == Double(bpm) ? Color.green : Color.gray.opacity(0.3))
                             )
                     }
                 }
             }
-            .padding(.horizontal, horizontalPadding)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 6)
         }
-        .frame(height: maxButtonSize + 8)
+        .frame(height: maxButtonSize)
         .sheet(isPresented: $showingLanguageSelection) {
             LanguageSelectionView()
         }
