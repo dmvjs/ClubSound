@@ -28,14 +28,14 @@ struct ContentView: View {
             ScrollViewReader { proxy in
                 ZStack(alignment: .topTrailing) {
                     VStack(spacing: 0) {
-                        // Tempo Button Row at top
+                        // Tempo Button Row at top - adjusted padding for Pro Max
                         HStack {
                             Spacer()
                             TempoButtonRow(audioManager: audioManager)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.top, UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0)
-                        .padding(.trailing, keyColumnWidth)  // Account for key column width
+                        .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? 0 : UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0)
+                        .padding(.trailing, keyColumnWidth)
 
                         // Sample list below
                         SampleScrollView(
@@ -57,7 +57,7 @@ struct ContentView: View {
                         }
                     }
 
-                    // Fixed-height BPM and Key columns
+                    // Fixed-height BPM and Key columns - adjusted top padding
                     HStack(alignment: .top, spacing: 0) {
                         BPMIndexView(
                             groupedSamples: groupedSamples,
@@ -98,7 +98,7 @@ struct ContentView: View {
                         .frame(width: keyColumnWidth)
                     }
                     .padding(.trailing, 6)
-                    .padding(.top, maxButtonSize + 20)
+                    .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? maxButtonSize - 20 : maxButtonSize + 20)
                     .zIndex(1)
                 }
                 .background(Color.black)
@@ -130,17 +130,35 @@ struct ContentView: View {
 
     private func addToNowPlaying(sample: Sample) {
         if nowPlaying.count < 4 && !nowPlaying.contains(where: { $0.id == sample.id }) {
+            // UI update on main thread
             nowPlaying.append(sample)
             sampleVolumes[sample.id] = 0.0
-            audioManager.addSampleToPlay(sample)
+            
+            // Audio operations on background thread
+            DispatchQueue.global(qos: .userInitiated).async {
+                audioManager.addSampleToPlay(sample)
+                DispatchQueue.main.async {
+                    // Force UI update
+                    audioManager.objectWillChange.send()
+                }
+            }
         }
     }
 
     private func removeFromNowPlaying(sample: Sample) {
         if let index = nowPlaying.firstIndex(where: { $0.id == sample.id }) {
+            // UI update on main thread
             withAnimation {
                 nowPlaying.remove(at: index)
+            }
+            
+            // Audio operations on background thread
+            DispatchQueue.global(qos: .userInitiated).async {
                 audioManager.removeSampleFromPlay(sample)
+                DispatchQueue.main.async {
+                    // Force UI update
+                    audioManager.objectWillChange.send()
+                }
             }
         }
     }

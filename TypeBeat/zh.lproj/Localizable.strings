@@ -51,4 +51,10 @@
 "language.button.accessibility" = "更改语言";
 
 // Main Volume
-"main.volume" = "主音量"; 
+"main.volume" = "主音量";
+
+// Language Change
+"language.change.title" = "确认更改语言";
+"language.change.message" = "更改语言将重新启动应用。是否继续？";
+"language.change.cancel" = "取消";
+"language.change.confirm" = "更改"; 

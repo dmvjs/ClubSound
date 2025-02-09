@@ -51,4 +51,10 @@
 "language.button.accessibility" = "Cambiar Idioma";
 
 // Main Volume
-"main.volume" = "Volumen principal"; 
+"main.volume" = "Volumen principal";
+
+// Language Change
+"language.change.title" = "Confirmar cambio de idioma";
+"language.change.message" = "Cambiar el idioma reiniciará la aplicación. ¿Continuar?";
+"language.change.cancel" = "Cancelar";
+"language.change.confirm" = "Cambiar"; 

@@ -51,4 +51,10 @@
 "language.button.accessibility" = "言語を変更";
 
 // Main Volume
-"main.volume" = "メイン音量"; 
+"main.volume" = "メイン音量";
+
+// Language Change
+"language.change.title" = "言語変更の確認";
+"language.change.message" = "言語を変更するとアプリが再起動されます。続行しますか？";
+"language.change.cancel" = "キャンセル";
+"language.change.confirm" = "変更"; 

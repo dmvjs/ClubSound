@@ -45,4 +45,10 @@
 "language.chinese" = "中文";
 
 // Main Volume
-"main.volume" = "Main Volume"; 
+"main.volume" = "Main Volume";
+
+// Language Change
+"language.change.title" = "Confirm Language Change";
+"language.change.message" = "Changing language will restart the app. Continue?";
+"language.change.cancel" = "Cancel";
+"language.change.confirm" = "Change"; 
