@@ -32,20 +32,25 @@ class AudioManager: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
-        // 1. Set up audio session first
+        // High quality audio session setup
         do {
             let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(.playback)
+            try audioSession.setPreferredSampleRate(48000)
+            try audioSession.setPreferredIOBufferDuration(0.005)
+            try audioSession.setCategory(.playback, mode: .default, options: [
+                .mixWithOthers,
+                .duckOthers
+            ])
             try audioSession.setActive(true)
         } catch {
             print("Failed to set up audio session: \(error)")
             return
         }
         
-        // 2. Connect main mixer to output
+        // Connect main mixer to output
         engine.connect(engine.mainMixerNode, to: engine.outputNode, format: nil)
         
-        // 3. Start engine
+        // Start engine
         do {
             try engine.start()
         } catch {
@@ -53,7 +58,7 @@ class AudioManager: ObservableObject {
             return
         }
         
-        // 4. Initialize reference time
+        // Initialize reference time
         referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
     }
     
@@ -238,10 +243,20 @@ class AudioManager: ObservableObject {
             try file.read(into: buffer)
             buffers[sample.id] = buffer
             
-            engine.connect(player, to: varispeed, format: processingFormat)
-            engine.connect(varispeed, to: timePitch, format: processingFormat)
-            engine.connect(timePitch, to: mixer, format: processingFormat)
-            engine.connect(mixer, to: engine.mainMixerNode, format: processingFormat)
+            // Configure high quality nodes
+            timePitch.bypass = false
+            timePitch.overlap = 8.0  // Higher overlap for better quality pitch shifting
+            
+            varispeed.bypass = false
+            
+            // Use high quality format for all connections
+            let highQualityFormat = AVAudioFormat(standardFormatWithSampleRate: 48000,
+                                                 channels: 2)
+            
+            engine.connect(player, to: varispeed, format: highQualityFormat)
+            engine.connect(varispeed, to: timePitch, format: highQualityFormat)
+            engine.connect(timePitch, to: mixer, format: highQualityFormat)
+            engine.connect(mixer, to: engine.mainMixerNode, format: highQualityFormat)
 
             players[sample.id] = player
             mixers[sample.id] = mixer
@@ -408,10 +423,14 @@ class AudioManager: ObservableObject {
             varispeed.rate = 1.0
             timePitch.rate = Float(rate)
             timePitch.pitch = 0.0
+            // Higher quality settings for pitch-locked mode
+            timePitch.overlap = 8.0
         } else {
             varispeed.rate = Float(rate)
             timePitch.rate = 1.0
             timePitch.pitch = 0.0
+            // Standard quality for varispeed mode
+            timePitch.overlap = 3.0
         }
     }
 
