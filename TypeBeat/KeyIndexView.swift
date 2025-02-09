@@ -16,7 +16,7 @@ struct KeyIndexView: View {
     var body: some View {
         VStack(spacing: 2) {
             ForEach(MusicKey.allCases, id: \.self) { key in
-                Text(key.name)
+                Text(key.localizedName)
                     .font(.system(size: 11, weight: .semibold))
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
