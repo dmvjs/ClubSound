@@ -17,24 +17,27 @@ struct MainVolumeControl: View {
         HStack {
             // BPM Circle with progress ring
             ZStack {
+                // Background track (iOS system gray)
                 Circle()
-                    .stroke(Color.blue.opacity(0.3), lineWidth: 3)
+                    .stroke(Color(.systemGray4), lineWidth: 2)
                     .frame(width: 39, height: 39)
                 
+                // Progress ring (iOS blue)
                 Circle()
                     .trim(from: 0, to: CGFloat(progress))
-                    .stroke(Color.blue, lineWidth: 3)
+                    .stroke(Color.accentColor, lineWidth: 2)
                     .rotationEffect(.degrees(-90))
                     .frame(width: 39, height: 39)
                     .animation(.linear(duration: 1/30), value: progress)
                 
+                // Center circle
                 Circle()
-                    .fill(Color.black)
-                    .frame(width: 33, height: 33)
+                    .fill(Color(.systemGray6))
+                    .frame(width: 35, height: 35)
                     .overlay(
                         Text("\(Int(audioManager.bpm))")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.primary)
                     )
             }
             .padding(8)
@@ -45,12 +48,12 @@ struct MainVolumeControl: View {
 
             Text("main.volume".localized)
                 .font(.subheadline)
-                .foregroundColor(.white)
+                .foregroundColor(.primary)
                 .lineLimit(2)
             Spacer()
 
             Slider(value: $mainVolume, in: 0...1)
-                .accentColor(.blue)
+                .accentColor(.accentColor)
                 .frame(width: 150)
                 .onChange(of: mainVolume) { newValue, _ in
                     audioManager.setMasterVolume(newValue)
