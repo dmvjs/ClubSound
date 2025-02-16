@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import QuartzCore
 
 struct NowPlayingRow: View {
     let sample: Sample
@@ -9,6 +10,7 @@ struct NowPlayingRow: View {
     @ObservedObject var audioManager: AudioManager
     
     @State private var progress: Double = 0
+    @StateObject private var progressUpdater = ProgressUpdater()
     
     var body: some View {
         HStack(spacing: 4) {
@@ -35,14 +37,17 @@ struct NowPlayingRow: View {
             }
             .frame(width: 39, height: 39)
             .padding(5)
-            .onReceive(Timer.publish(every: 1/30, on: .main, in: .common).autoconnect()) { _ in
-                if audioManager.isPlaying {
-                    withAnimation(.linear(duration: 1/30)) {
-                        progress = audioManager.loopProgress(for: sample.id)
+            .onAppear {
+                progressUpdater.start { [audioManager] in
+                    if audioManager.isPlaying {
+                        progress = audioManager.loopProgress()
+                    } else {
+                        progress = 0
                     }
-                } else {
-                    progress = 0
                 }
+            }
+            .onDisappear {
+                progressUpdater.stop()
             }
 
             Text(sample.title)
@@ -71,5 +76,38 @@ struct NowPlayingRow: View {
                 Label("action.remove".localized, systemImage: "trash")
             }
         }
+    }
+}
+
+// Separate class to handle DisplayLink
+class ProgressUpdater: ObservableObject {
+    private var displayLink: CADisplayLink?
+    
+    func start(update: @escaping () -> Void) {
+        displayLink?.invalidate()
+        
+        let target = DisplayLinkTarget(updateHandler: update)
+        let displayLink = CADisplayLink(target: target, selector: #selector(DisplayLinkTarget.handleUpdate))
+        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        displayLink.add(to: RunLoop.main, forMode: RunLoop.Mode.common)
+        self.displayLink = displayLink
+    }
+    
+    func stop() {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+}
+
+// Helper class to handle the @objc requirement
+class DisplayLinkTarget {
+    let updateHandler: () -> Void
+    
+    init(updateHandler: @escaping () -> Void) {
+        self.updateHandler = updateHandler
+    }
+    
+    @objc func handleUpdate() {
+        updateHandler()
     }
 }

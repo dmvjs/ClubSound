@@ -317,14 +317,24 @@ class AudioManager: ObservableObject {
     }
     
     func loopProgress() -> Double {
-        guard isPlaying, let masterClock = masterClock else { return 0.0 }
+        guard isPlaying, 
+              let masterClock = masterClock,
+              let startTime = masterStartTime else { return 0.0 }
         
         let currentTime = AVAudioTime(hostTime: mach_absolute_time())
-        let elapsedTime = currentTime.timeIntervalSince(masterClock)
+        let elapsedTime = currentTime.timeIntervalSince(startTime)
         
-        // Calculate progress based on master loop duration
-        let progress = elapsedTime.truncatingRemainder(dividingBy: masterLoopDuration) / masterLoopDuration
-        return max(0.0, min(1.0, progress))
+        // Calculate progress based on master loop duration and apply phase correction
+        let rawProgress = elapsedTime.truncatingRemainder(dividingBy: masterLoopDuration) / masterLoopDuration
+        
+        // Ensure smooth looping at boundaries
+        if rawProgress > 0.99 {
+            return 1.0
+        } else if rawProgress < 0.01 {
+            return 0.0
+        }
+        
+        return rawProgress
     }
     
     private func calculatePreciseStartTime() -> AVAudioTime {
@@ -814,17 +824,6 @@ class AudioManager: ObservableObject {
         syncTimer = nil
         masterStartTime = nil
         masterPhasePosition = 0.0
-    }
-
-    func loopProgress(for sampleId: Int) -> Double {
-        guard isPlaying, let masterClock = masterClock else { return 0.0 }
-        
-        let currentTime = AVAudioTime(hostTime: mach_absolute_time())
-        let elapsedTime = currentTime.timeIntervalSince(masterClock)
-        
-        // Calculate progress based on master loop duration
-        let progress = elapsedTime.truncatingRemainder(dividingBy: masterLoopDuration) / masterLoopDuration
-        return max(0.0, min(1.0, progress))
     }
 
     private func startProgressUpdates() {
