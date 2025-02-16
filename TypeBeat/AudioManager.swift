@@ -102,14 +102,17 @@ class AudioManager: ObservableObject {
                 
                 // Only proceed with sync if we're playing
                 if self.isPlaying {
-                    // Adjust rates while maintaining playback
+                    // Reset the master clock so that the new tempo is applied smoothly
+                    self.resetReferenceStartTimeToNearestBeat()
+
+                    // Adjust the playback rates for each sample based on the new BPM
                     for (sampleId, _) in self.players {
                         if let sample = self.samples.first(where: { $0.id == sampleId }) {
                             self.adjustPlaybackRates(for: sample)
                         }
                     }
-                    
-                    // Update phase without stopping
+
+                    // (Optional) Update phases without stopping playback
                     self.adjustPlaybackRatesAndKeepPhase()
                 } else {
                     // If not playing, just update the rates
@@ -128,13 +131,14 @@ class AudioManager: ObservableObject {
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setPreferredSampleRate(48000)
             try audioSession.setPreferredIOBufferDuration(0.005)
-            try audioSession.setCategory(.playback, mode: .default, options: [
-                .mixWithOthers,
-                .duckOthers
-            ])
+            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
             try audioSession.setActive(true)
         } catch {
-            print("Failed to set up audio session: \(error)")
+            // Log error in detail for debugging and consider a fallback or alert
+            print("❌ Failed to set up audio session: \(error.localizedDescription)")
+            #if DEBUG
+            assertionFailure("Audio session setup failed!")
+            #endif
         }
     }
     
@@ -574,7 +578,6 @@ class AudioManager: ObservableObject {
         let nearestBeatOffsetSeconds = nearestBeatBoundary - elapsedTimeInSeconds
         let newHostTime = currentMasterClock.hostTime + secondsToHostTime(nearestBeatOffsetSeconds)
         
-        // Update the published property
         self.masterClock = AVAudioTime(hostTime: newHostTime)
     }
 
@@ -678,12 +681,14 @@ class AudioManager: ObservableObject {
         let rate = bpm / sample.bpm
         
         if pitchLock {
+            // In pitch-locked mode, keep the varispeed at 1.0 and use timePitch.rate for the tempo difference
             varispeed.rate = 1.0
             timePitch.rate = Float(rate)
             timePitch.pitch = 0.0
-            // Higher quality settings for pitch-locked mode
+            // Use higher overlap for quality
             timePitch.overlap = 8.0
         } else {
+            // In standard mode, apply tempo change via varispeed
             varispeed.rate = Float(rate)
             timePitch.rate = 1.0
             timePitch.pitch = 0.0

@@ -25,71 +25,74 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollViewReader { proxy in
-                ZStack(alignment: .topTrailing) {
-                    // Base content
-                    VStack(spacing: 0) {
-                        // Just a spacer for the top row's height
-                        Color.clear
-                            .frame(height: maxButtonSize)
-                            .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? 0 : (UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0))
+            GeometryReader { geometry in
+                let safeAreaInsets = geometry.safeAreaInsets
+                ScrollViewReader { proxy in
+                    ZStack(alignment: .topTrailing) {
+                        // Base content
+                        VStack(spacing: 0) {
+                            // Spacer using safe area insets
+                            Color.clear
+                                .frame(height: maxButtonSize)
+                                .padding(.top, safeAreaInsets.top)
 
-                        // Rest of content
-                        SampleScrollView(
-                            groupedSamples: groupedSamples,
-                            addToNowPlaying: addToNowPlaying,
-                            removeFromNowPlaying: removeFromNowPlaying,
-                            isInPlaylist: isInPlaylist
-                        )
-                        .padding(.top, 8)
-
-                        if !nowPlaying.isEmpty {
-                            NowPlayingView(
-                                nowPlaying: $nowPlaying,
-                                sampleVolumes: $sampleVolumes,
-                                mainVolume: $mainVolume,
-                                audioManager: audioManager,
-                                removeFromNowPlaying: removeFromNowPlaying
+                            // Rest of content
+                            SampleScrollView(
+                                groupedSamples: groupedSamples,
+                                addToNowPlaying: addToNowPlaying,
+                                removeFromNowPlaying: removeFromNowPlaying,
+                                isInPlaylist: isInPlaylist
                             )
+                            .padding(.top, 8)
+
+                            if !nowPlaying.isEmpty {
+                                NowPlayingView(
+                                    nowPlaying: $nowPlaying,
+                                    sampleVolumes: $sampleVolumes,
+                                    mainVolume: $mainVolume,
+                                    audioManager: audioManager,
+                                    removeFromNowPlaying: removeFromNowPlaying
+                                )
+                            }
                         }
-                    }
 
-                    // Column buttons
-                    VStack(alignment: .trailing, spacing: 8) {
-                        KeyIndexView(
-                            groupedSamples: groupedSamples,
-                            activeKey: activeKey,
-                            activeBPM: activeBPM,
-                            onSelection: { key in
-                                handleKeySelection(key, proxy)
-                            }
-                        )
-                        .allowsHitTesting(true)
+                        // Column buttons
+                        VStack(alignment: .trailing, spacing: 8) {
+                            KeyIndexView(
+                                groupedSamples: groupedSamples,
+                                activeKey: activeKey,
+                                activeBPM: activeBPM,
+                                onSelection: { key in
+                                    handleKeySelection(key, proxy)
+                                }
+                            )
+                            .allowsHitTesting(true)
+                            .zIndex(2)
+
+                            BPMIndexView(
+                                groupedSamples: groupedSamples,
+                                activeBPM: activeBPM,
+                                onSelection: { bpm in
+                                    handleBPMSelection(bpm, proxy)
+                                }
+                            )
+                            .allowsHitTesting(true)
+                            .zIndex(2)
+                        }
+                        .padding(.trailing, 6)
+                        .padding(.top, maxButtonSize + 24)
+
+                        // Top button row - now at ZStack level
+                        HStack {
+                            Spacer()
+                            TempoButtonRow(audioManager: audioManager)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, safeAreaInsets.top)
                         .zIndex(2)
-
-                        BPMIndexView(
-                            groupedSamples: groupedSamples,
-                            activeBPM: activeBPM,
-                            onSelection: { bpm in
-                                handleBPMSelection(bpm, proxy)
-                            }
-                        )
-                        .allowsHitTesting(true)
-                        .zIndex(2)
                     }
-                    .padding(.trailing, 6)
-                    .padding(.top, maxButtonSize + 24)
-
-                    // Top button row - now at ZStack level
-                    HStack {
-                        Spacer()
-                        TempoButtonRow(audioManager: audioManager)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, UIDevice.current.userInterfaceIdiom == .phone ? 0 : (UIApplication.shared.windows.first?.safeAreaInsets.top ?? 0))
-                    .zIndex(2)
+                    .background(Color.black)
                 }
-                .background(Color.black)
             }
         }
     }

@@ -10,7 +10,6 @@ struct NowPlayingRow: View {
     @ObservedObject var audioManager: AudioManager
     
     @State private var progress: Double = 0
-    @StateObject private var progressUpdater = ProgressUpdater()
     
     var body: some View {
         HStack(spacing: 4) {
@@ -37,17 +36,13 @@ struct NowPlayingRow: View {
             }
             .frame(width: 39, height: 39)
             .padding(5)
-            .onAppear {
-                progressUpdater.start { [audioManager] in
-                    if audioManager.isPlaying {
-                        progress = audioManager.loopProgress()
-                    } else {
-                        progress = 0
-                    }
+            // Update the progress using a Timer publisher at ~60fps
+            .onReceive(Timer.publish(every: 1/60, on: .main, in: .common).autoconnect()) { _ in
+                if audioManager.isPlaying {
+                    progress = audioManager.loopProgress()
+                } else {
+                    progress = 0
                 }
-            }
-            .onDisappear {
-                progressUpdater.stop()
             }
 
             Text(sample.title)
