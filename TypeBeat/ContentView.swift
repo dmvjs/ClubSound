@@ -43,7 +43,7 @@ struct ContentView: View {
                         )
                         .padding(.top, 8)
 
-                        if !audioManager.activeSamples.isEmpty {
+                        if !nowPlaying.isEmpty {
                             NowPlayingView(
                                 nowPlaying: $nowPlaying,
                                 sampleVolumes: $sampleVolumes,
