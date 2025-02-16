@@ -7,10 +7,17 @@ struct SampleRow: View {
     
     var body: some View {
         Button(action: {
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+            
             if isInPlaylist {
-                removeFromNowPlaying()
+                DispatchQueue.main.async {
+                    removeFromNowPlaying()
+                }
             } else {
-                addToNowPlaying()
+                DispatchQueue.main.async {
+                    addToNowPlaying()
+                }
             }
         }) {
             HStack {

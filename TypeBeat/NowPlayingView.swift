@@ -8,22 +8,19 @@ struct NowPlayingView: View {
     let removeFromNowPlaying: (Sample) -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            if nowPlaying.isEmpty {
-                EmptyView()
-            } else {
-                VStack(spacing: 0) {
-                    MainVolumeControl(mainVolume: $mainVolume, audioManager: audioManager)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 4)
-                    
-                    NowPlayingList(
-                        nowPlaying: $nowPlaying,
-                        sampleVolumes: $sampleVolumes,
-                        audioManager: audioManager,
-                        removeFromNowPlaying: removeFromNowPlaying
-                    )
-                }
+        VStack(spacing: 2) {
+            if !nowPlaying.isEmpty {
+                MainVolumeControl(mainVolume: $mainVolume, audioManager: audioManager)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 2)
+                    .padding(.bottom, 4)
+                
+                NowPlayingList(
+                    nowPlaying: $nowPlaying,
+                    sampleVolumes: $sampleVolumes,
+                    audioManager: audioManager,
+                    removeFromNowPlaying: removeFromNowPlaying
+                )
             }
         }
         .frame(maxWidth: .greatestFiniteMagnitude, alignment: .bottom)

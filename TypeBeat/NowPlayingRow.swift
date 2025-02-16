@@ -7,32 +7,43 @@ struct NowPlayingRow: View {
     let remove: () -> Void
     let keyColor: Color
     @ObservedObject var audioManager: AudioManager
-
-    @State private var progress: Double = 0.0
-    @State private var timer: AnyCancellable?
-
+    
+    @State private var progress: Double = 0
+    
     var body: some View {
         HStack(spacing: 4) {
             // Circle with progress ring
             ZStack {
-                // Progress ring - now white with opacity
+                // Background track (invisible but maintains spacing)
+                Circle()
+                    .stroke(Color.clear, lineWidth: 2)
+                    .frame(width: 39, height: 39)
+                
                 Circle()
                     .trim(from: 0, to: CGFloat(progress))
-                    .stroke(Color.white.opacity(0.8), lineWidth: 3)  // Changed to white
-                    .rotationEffect(.degrees(-90))  // Start from top
+                    .stroke(sample.keyColor(), lineWidth: 3)
+                    .rotationEffect(.degrees(-90))
                 
-                // Main circle (keeps original key color)
                 Circle()
-                    .fill(sample.keyColor())
-                    .frame(width: 33, height: 33)
+                    .fill(Color(.secondarySystemBackground))
+                    .frame(width: 35, height: 35)
                     .overlay(
                         Text("\(sample.bpm, specifier: "%.0f")")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(sample.keyColor())
                     )
             }
-            .frame(width: 39, height: 39)  // Slightly larger to accommodate progress ring
+            .frame(width: 39, height: 39)
             .padding(5)
+            .onReceive(Timer.publish(every: 1/30, on: .main, in: .common).autoconnect()) { _ in
+                if audioManager.isPlaying {
+                    withAnimation(.linear(duration: 1/30)) {
+                        progress = audioManager.loopProgress(for: sample.id)
+                    }
+                } else {
+                    progress = 0
+                }
+            }
 
             Text(sample.title)
                 .font(.subheadline)
@@ -45,36 +56,20 @@ struct NowPlayingRow: View {
                 .accentColor(sample.keyColor())
                 .frame(width: 150)
                 .padding(8)
-
         }
         .listRowSeparator(.hidden)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color(.systemGray6).opacity(0.4))
         )
-        .padding(.vertical, -4) // Reduce vertical padding
-        .listRowBackground(Color.black.opacity(0.9)) // Match list background
+        .padding(.vertical, -4)
+        .listRowBackground(Color.black.opacity(0.9))
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 remove()
             } label: {
                 Label("action.remove".localized, systemImage: "trash")
             }
-        }
-        .onAppear {
-            // Start the timer when the view appears
-            timer = Timer.publish(every: 0.1, on: .main, in: .common)
-                .autoconnect()
-                .sink { _ in
-                    let newProgress = audioManager.loopProgress(for: sample.id)
-                    withAnimation(.linear(duration: 0.1)) {
-                        self.progress = newProgress  // Now mutable
-                    }
-                }
-        }
-        .onDisappear {
-            // Invalidate the timer when the view disappears
-            timer?.cancel()
         }
     }
 }
