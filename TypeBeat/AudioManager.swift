@@ -6,6 +6,9 @@ import SwiftUI
 class AudioManager: ObservableObject {
     static let shared = AudioManager()
     
+    // Add samples array as a property
+    private let samples: [Sample] = TypeBeat.samples
+    
     @Published var activeSamples: Set<Int> = []
     @Published var bpm: Double = 84.0 {
         didSet {
@@ -55,6 +58,9 @@ class AudioManager: ObservableObject {
     // Update the timer property to use Any
     private var progressUpdateTimer: Any?
     
+    // Add a subject for BPM updates
+    private let bpmSubject = PassthroughSubject<Double, Never>()
+    
     private init() {
         setupAudioSession()
         setupEngine()
@@ -62,6 +68,38 @@ class AudioManager: ObservableObject {
         // Initialize master clock with a small delay for setup
         masterClock = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
         masterLoopFrames = AVAudioFramePosition(masterLoopDuration * sampleRate)
+
+        // Modify BPM subscription to maintain continuous playback
+        bpmSubject
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newBPM in
+                guard let self = self else { return }
+                self.bpm = newBPM
+                
+                // Only proceed with sync if we're playing
+                if self.isPlaying {
+                    // Calculate next beat time for smooth transition
+                    self.resetReferenceStartTimeToNearestBeat()
+                    
+                    // Adjust rates while maintaining playback
+                    for (sampleId, _) in self.players {
+                        if let sample = self.samples.first(where: { $0.id == sampleId }) {
+                            self.adjustPlaybackRates(for: sample)
+                        }
+                    }
+                    
+                    // Update phase without stopping
+                    self.adjustPlaybackRatesAndKeepPhase()
+                } else {
+                    // If not playing, just update the rates
+                    for (sampleId, _) in self.players {
+                        if let sample = self.samples.first(where: { $0.id == sampleId }) {
+                            self.adjustPlaybackRates(for: sample)
+                        }
+                    }
+                }
+            }
+            .store(in: &cancellables)
     }
     
     private func setupAudioSession() {
@@ -91,32 +129,41 @@ class AudioManager: ObservableObject {
     }
     
     private func updateMasterClock(newBPM: Double) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
+        guard let currentMasterClock = masterClock else {
+            masterClock = AVAudioTime(hostTime: mach_absolute_time())
+            return
+        }
+        
+        // Calculate current phase position
+        let currentTime = AVAudioTime(hostTime: mach_absolute_time())
+        let elapsedTime = currentTime.timeIntervalSince(currentMasterClock)
+        let currentPhase = elapsedTime.truncatingRemainder(dividingBy: masterLoopDuration)
+        
+        // Update master clock to maintain phase
+        masterClock = currentTime.offset(seconds: -currentPhase)
+        masterLoopFrames = AVAudioFramePosition(masterLoopDuration * sampleRate)
+        
+        if isPlaying {
+            // Calculate next beat boundary for smooth transition
+            let nextBeatTime = calculatePreciseStartTime()
             
-            // Initialize master clock if needed
-            if self.masterClock == nil {
-                self.masterClock = AVAudioTime(hostTime: mach_absolute_time())
-                return
-            }
-            
-            // Calculate current phase position
-            let currentTime = AVAudioTime(hostTime: mach_absolute_time())
-            
-            // Safely unwrap masterClock
-            guard let currentMasterClock = self.masterClock else { return }
-            
-            let elapsedTime = currentTime.timeIntervalSince(currentMasterClock)
-            let currentPhase = elapsedTime.truncatingRemainder(dividingBy: self.masterLoopDuration)
-            
-            // Update master clock to maintain phase
-            self.masterClock = currentTime.offset(seconds: -currentPhase)
-            self.masterLoopFrames = AVAudioFramePosition(self.masterLoopDuration * self.sampleRate)
-            
-            // Resync all active samples
-            DispatchQueue.global(qos: .userInitiated).async {
-                for sampleId in self.activeSamples {
-                    self.resyncSample(sampleId)
+            // Update each player without stopping
+            for (sampleId, player) in players {
+                guard let buffer = buffers[sampleId] else { continue }
+                
+                // Schedule the next loop to start at the beat boundary
+                player.scheduleBuffer(buffer, 
+                                    at: nextBeatTime, 
+                                    options: [.loops, .interruptsAtLoop],
+                                    completionCallbackType: .dataPlayedBack) { _ in
+                    DispatchQueue.main.async {
+                        self.objectWillChange.send()
+                    }
+                }
+                
+                // Don't stop the current playback - it will transition smoothly
+                if let sample = samples.first(where: { $0.id == sampleId }) {
+                    adjustPlaybackRates(for: sample)
                 }
             }
         }
@@ -436,13 +483,9 @@ class AudioManager: ObservableObject {
             self.isPlaying.toggle()
             
             if self.isPlaying {
-                DispatchQueue.global(qos: .userInitiated).async {
-                    self.startAllPlayersInSync()
-                }
+                self.startAllPlayersInSync()
             } else {
-                DispatchQueue.global(qos: .userInitiated).async {
-                    self.stopAllPlayers()
-                }
+                self.stopAllPlayers()
             }
         }
     }
@@ -498,18 +541,19 @@ class AudioManager: ObservableObject {
     }
 
     private func adjustPlaybackRatesAndKeepPhase() {
-        for (sampleId, _) in players {
-            if let sample = samples.first(where: { $0.id == sampleId }) {
-                adjustPlaybackRates(for: sample)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            for (sampleId, _) in self.players {
+                if let sample = self.samples.first(where: { $0.id == sampleId }) {
+                    self.adjustPlaybackRates(for: sample)
+                }
             }
         }
     }
 
     private func restartAllPlayersWithAdjustedPhase() {
-        let nextBeat = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
+        let nextBeat = calculatePreciseStartTime()
         masterClock = nextBeat
-        
-        stopAllPlayers()
         
         for (sampleId, player) in players {
             guard let buffer = buffers[sampleId] else { continue }
@@ -518,9 +562,14 @@ class AudioManager: ObservableObject {
                 adjustPlaybackRates(for: sample)
             }
             
+            // Schedule the buffer at the next beat boundary
+            player.stop()
             player.scheduleBuffer(buffer, at: nextBeat, options: [.loops, .interruptsAtLoop])
             player.play(at: nextBeat)
         }
+        
+        // Maintain playing state
+        isPlaying = true
     }
 
     func removeSampleFromPlay(_ sample: Sample) {
@@ -680,27 +729,7 @@ class AudioManager: ObservableObject {
     }
 
     func updateBPM(to newBPM: Double) {
-        let wasPlaying = isPlaying
-        if wasPlaying {
-            stopAllPlayers()
-        }
-        
-        bpm = newBPM
-        
-        // Reset reference time to nearest beat for better sync
-        resetReferenceStartTimeToNearestBeat()
-        
-        // Adjust rates for all samples
-        for (sampleId, _) in players {
-            if let sample = samples.first(where: { $0.id == sampleId }) {
-                adjustPlaybackRates(for: sample)
-            }
-        }
-        
-        // If was playing, restart with perfect phase
-        if wasPlaying {
-            restartAllPlayersWithAdjustedPhase()
-        }
+        bpmSubject.send(newBPM)
     }
 
     private func loadAudioFile(for sample: Sample) throws -> AVAudioPCMBuffer? {
@@ -722,47 +751,50 @@ class AudioManager: ObservableObject {
         return buffer
     }
 
-    func startAllPlayersInSync() {
+    private func startAllPlayersInSync() {
+        // Calculate start time slightly in the future
+        let startTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.05))
+        
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
-            // Calculate start time slightly in the future
-            let startTime = AVAudioTime(hostTime: mach_absolute_time() + self.secondsToHostTime(0.05))
             self.masterClock = startTime
+        }
+        
+        // Start players on background thread
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
             
-            // Start players on background thread
-            DispatchQueue.global(qos: .userInitiated).async {
-                for (sampleId, player) in self.players {
-                    guard let buffer = self.buffers[sampleId] else { continue }
-                    player.stop() // Ensure clean state
-                    
-                    player.scheduleBuffer(buffer, 
-                                        at: startTime, 
-                                        options: [.loops, .interruptsAtLoop],
-                                        completionCallbackType: .dataPlayedBack) { _ in
-                        DispatchQueue.main.async {
-                            self.objectWillChange.send()
-                        }
-                    }
-                    player.play(at: startTime)
-                }
+            for (sampleId, player) in self.players {
+                guard let buffer = self.buffers[sampleId] else { continue }
+                player.stop() // Ensure clean state
                 
-                // Start progress updates on main thread
-                DispatchQueue.main.async {
-                    self.startProgressUpdates()
+                player.scheduleBuffer(buffer, 
+                                   at: startTime, 
+                                   options: [.loops, .interruptsAtLoop],
+                                   completionCallbackType: .dataPlayedBack) { _ in
+                    DispatchQueue.main.async {
+                        self.objectWillChange.send()
+                    }
                 }
+                player.play(at: startTime)
+            }
+            
+            // Start progress updates on main thread
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.startProgressUpdates()
             }
         }
     }
 
     func loopProgress(for sampleId: Int) -> Double {
-        guard isPlaying, let startTime = masterClock else { return 0.0 }
+        guard isPlaying, let masterClock = masterClock else { return 0.0 }
         
         let currentTime = AVAudioTime(hostTime: mach_absolute_time())
-        let elapsedTime = currentTime.timeIntervalSince(startTime)
+        let elapsedTime = currentTime.timeIntervalSince(masterClock)
         
         // Calculate progress based on master loop duration
-        let progress = (elapsedTime / masterLoopDuration).truncatingRemainder(dividingBy: 1.0)
+        let progress = elapsedTime.truncatingRemainder(dividingBy: masterLoopDuration) / masterLoopDuration
         return max(0.0, min(1.0, progress))
     }
 
@@ -775,19 +807,24 @@ class AudioManager: ObservableObject {
         }
         progressUpdateTimer = nil
         
-        // Create new DisplayLink with higher priority
+        // Create new DisplayLink with higher priority and faster update rate
         let displayLink = CADisplayLink(target: self, selector: #selector(updateProgress))
-        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 60)
+        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
         displayLink.add(to: .main, forMode: .common)
         
         progressUpdateTimer = displayLink
     }
 
     @objc private func updateProgress() {
+        self.objectWillChange.send()
+    }
+
+    // Add this public method
+    func play() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            // Force UI update on main thread for all observers
-            self.objectWillChange.send()
+            self.isPlaying = true
+            self.startAllPlayersInSync()
         }
     }
 

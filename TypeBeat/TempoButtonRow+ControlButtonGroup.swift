@@ -37,8 +37,7 @@ struct ControlButtonGroup: View {
                 }
             } else {
                 DispatchQueue.main.async {
-                    audioManager.isPlaying = true
-                    audioManager.startAllPlayersInSync()
+                    audioManager.play()
                 }
             }
         }) {

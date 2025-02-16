@@ -166,26 +166,33 @@ struct ContentView: View {
     }
 
     private func handleBPMSelection(_ bpm: Double, _ proxy: ScrollViewProxy) {
-        withAnimation {
-            // Update BPM using the correct method name
-            audioManager.updateBPM(to: bpm)
-            activeBPM = bpm
-
-            // If current key exists in new BPM, keep it and scroll there
-            let keysForNewBPM = groupedSamples
-                .first(where: { $0.0 == bpm })?
-                .1
-                .map { $0.0 } ?? []
-
-            if let currentKey = activeKey, !keysForNewBPM.contains(currentKey) {
-                activeKey = nil
+        // Ensure all UI and state updates happen on main thread
+        DispatchQueue.main.async {
+            withAnimation {
+                // First update the UI state
+                self.activeBPM = bpm
+                
+                // If current key exists in new BPM, keep it and scroll there
+                let keysForNewBPM = self.groupedSamples
+                    .first(where: { $0.0 == bpm })?
+                    .1
+                    .map { $0.0 } ?? []
+                
+                if let currentKey = self.activeKey, !keysForNewBPM.contains(currentKey) {
+                    self.activeKey = nil
+                }
+                
+                // Then update the audio manager
+                self.audioManager.updateBPM(to: bpm)
+                
+                // Scroll to BPM section
+                proxy.scrollTo("\(Int(bpm))", anchor: .top)
             }
-
-            // Scroll to BPM section
-            proxy.scrollTo("\(Int(bpm))", anchor: .top)
+            
+            // Haptic feedback
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
         }
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
     }
 
     private func handleKeySelection(_ key: MusicKey, _ proxy: ScrollViewProxy) {
