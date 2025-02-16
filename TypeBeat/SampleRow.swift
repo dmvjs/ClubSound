@@ -7,10 +7,16 @@ struct SampleRow: View {
     
     var body: some View {
         Button(action: {
-            if isInPlaylist {
-                removeFromNowPlaying()
-            } else {
-                addToNowPlaying()
+            // Prevent multiple rapid taps
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+            
+            DispatchQueue.global(qos: .userInitiated).async {
+                if isInPlaylist {
+                    removeFromNowPlaying()
+                } else {
+                    addToNowPlaying()
+                }
             }
         }) {
             HStack {

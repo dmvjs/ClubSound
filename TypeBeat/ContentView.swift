@@ -118,29 +118,40 @@ struct ContentView: View {
 
     private func addToNowPlaying(sample: Sample) {
         if nowPlaying.count < 4 && !nowPlaying.contains(where: { $0.id == sample.id }) {
-            // Do everything on main thread for audio sync
-            nowPlaying.append(sample)
-            sampleVolumes[sample.id] = 0.0
+            // UI updates first
+            DispatchQueue.main.async {
+                self.nowPlaying.append(sample)
+                self.sampleVolumes[sample.id] = 0.0
+            }
+            
+            // Then audio setup
             audioManager.addSampleToPlay(sample)
             
-            // Force UI update
-            audioManager.objectWillChange.send()
+            // Force UI refresh
+            DispatchQueue.main.async {
+                self.audioManager.objectWillChange.send()
+            }
         }
     }
 
     private func removeFromNowPlaying(sample: Sample) {
         if let index = nowPlaying.firstIndex(where: { $0.id == sample.id }) {
-            // UI update on main thread
-            withAnimation {
-                nowPlaying.remove(at: index)
+            // UI updates on main thread
+            DispatchQueue.main.async {
+                withAnimation {
+                    // Use Array's remove method explicitly
+                    var updatedArray = self.nowPlaying
+                    updatedArray.remove(at: index)
+                    self.nowPlaying = updatedArray
+                }
             }
-
-            // Audio operations on background thread
+            
+            // Audio cleanup on background thread
             DispatchQueue.global(qos: .userInitiated).async {
-                audioManager.removeSampleFromPlay(sample)
+                self.audioManager.removeSampleFromPlay(sample)
+                // Force UI update on main thread after cleanup
                 DispatchQueue.main.async {
-                    // Force UI update
-                    audioManager.objectWillChange.send()
+                    self.audioManager.objectWillChange.send()
                 }
             }
         }
@@ -150,8 +161,8 @@ struct ContentView: View {
         nowPlaying.contains(where: { $0.id == sample.id })
     }
 
-    func loopProgress(for sampleId: Int) -> Double {
-        audioManager.loopProgress(for: sampleId)
+    func loopProgress() -> Double {
+        audioManager.loopProgress()
     }
 
     private func handleBPMSelection(_ bpm: Double, _ proxy: ScrollViewProxy) {

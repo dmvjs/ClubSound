@@ -32,12 +32,8 @@ struct TempoButtonRow: View {
                 // Tempo buttons group
                 ForEach([69, 84, 94, 102], id: \.self) { bpm in
                     Button(action: {
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            audioManager.updateBPM(to: Double(bpm))
-                            DispatchQueue.main.async {
-                                audioManager.objectWillChange.send()
-                            }
-                        }
+                        // Update BPM safely on main thread
+                        audioManager.updateBPM(to: Double(bpm))
                     }) {
                         Text("\(bpm)")
                             .font(.system(size: buttonSize * 0.4))
@@ -122,9 +118,34 @@ struct TempoButtonRow: View {
     }
 
     private func playPauseButton(size: CGFloat) -> some View {
-        Button(action: {
-            withAnimation {
-                audioManager.togglePlayback()
+        let buttonSize = max(size, 44) // Ensure minimum size
+        
+        return Button(action: {
+            // Haptic feedback
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+            
+            if audioManager.isPlaying {
+                // Stop sequence
+                DispatchQueue.main.async {
+                    // Update UI state immediately
+                    audioManager.isPlaying = false
+                    // Stop audio on background thread
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        audioManager.stopAllPlayers()
+                    }
+                }
+            } else {
+                // Start sequence
+                DispatchQueue.main.async {
+                    // First update UI
+                    audioManager.isPlaying = true
+                    
+                    // Then start audio with slight delay to allow UI update
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        audioManager.startAllPlayersInSync()
+                    }
+                }
             }
         }) {
             ZStack {
@@ -132,10 +153,10 @@ struct TempoButtonRow: View {
                     .fill(audioManager.isPlaying ? Color.green : Color.red)
                 
                 Image(systemName: audioManager.isPlaying ? "stop.fill" : "play.fill")
-                    .font(.system(size: size * 0.5))
+                    .font(.system(size: buttonSize * 0.5))
                     .foregroundColor(audioManager.isPlaying ? .black : .white)
             }
-            .frame(width: size, height: size)
+            .frame(width: buttonSize, height: buttonSize)
             .scaleEffect(audioManager.isPlaying ? 1.0 : breatheScale)
             .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
         }

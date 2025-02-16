@@ -8,20 +8,15 @@ struct NowPlayingRow: View {
     let keyColor: Color
     @ObservedObject var audioManager: AudioManager
 
-    @State private var progress: Double = 0.0
-    @State private var timer: AnyCancellable?
-
     var body: some View {
         HStack(spacing: 4) {
             // Circle with progress ring
             ZStack {
-                // Progress ring - now white with opacity
                 Circle()
-                    .trim(from: 0, to: CGFloat(progress))
-                    .stroke(Color.white.opacity(0.8), lineWidth: 3)  // Changed to white
-                    .rotationEffect(.degrees(-90))  // Start from top
+                    .trim(from: 0, to: CGFloat(audioManager.loopProgress()))  // Direct call instead of state
+                    .stroke(Color.white.opacity(0.8), lineWidth: 3)
+                    .rotationEffect(.degrees(-90))
                 
-                // Main circle (keeps original key color)
                 Circle()
                     .fill(sample.keyColor())
                     .frame(width: 33, height: 33)
@@ -31,7 +26,7 @@ struct NowPlayingRow: View {
                             .foregroundColor(.white)
                     )
             }
-            .frame(width: 39, height: 39)  // Slightly larger to accommodate progress ring
+            .frame(width: 39, height: 39)
             .padding(5)
 
             Text(sample.title)
@@ -60,21 +55,6 @@ struct NowPlayingRow: View {
             } label: {
                 Label("action.remove".localized, systemImage: "trash")
             }
-        }
-        .onAppear {
-            // Start the timer when the view appears
-            timer = Timer.publish(every: 0.1, on: .main, in: .common)
-                .autoconnect()
-                .sink { _ in
-                    let newProgress = audioManager.loopProgress(for: sample.id)
-                    withAnimation(.linear(duration: 0.1)) {
-                        self.progress = newProgress  // Now mutable
-                    }
-                }
-        }
-        .onDisappear {
-            // Invalidate the timer when the view disappears
-            timer?.cancel()
         }
     }
 }
