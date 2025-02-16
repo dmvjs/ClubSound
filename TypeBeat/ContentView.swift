@@ -118,13 +118,16 @@ struct ContentView: View {
 
     private func addToNowPlaying(sample: Sample) {
         if nowPlaying.count < 4 && !nowPlaying.contains(where: { $0.id == sample.id }) {
-            // UI updates first
+            // Set volume first
+            sampleVolumes[sample.id] = 0.0
+            audioManager.setVolume(for: sample, volume: 0.0)
+            
+            // Then add to UI
             DispatchQueue.main.async {
                 self.nowPlaying.append(sample)
-                self.sampleVolumes[sample.id] = 0.0
             }
             
-            // Then audio setup
+            // Finally setup audio
             audioManager.addSampleToPlay(sample)
             
             // Force UI refresh

@@ -415,117 +415,101 @@ class AudioManager: ObservableObject {
     func addSampleToPlay(_ sample: Sample) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
-            // Don't add if already playing
             guard !self.players.keys.contains(sample.id) else { return }
             
             do {
+                // Stop any existing playback for this sample
+                if let existingMixer = self.mixers[sample.id] {
+                    existingMixer.outputVolume = 0
+                    if let existingPlayer = self.players[sample.id] {
+                        existingPlayer.stop()
+                    }
+                }
+                
                 // Create and configure nodes
                 let player = AVAudioPlayerNode()
                 let mixer = AVAudioMixerNode()
                 let varispeed = AVAudioUnitVarispeed()
                 let timePitch = AVAudioUnitTimePitch()
                 
-                // Load audio file
-                guard let url = Bundle.main.url(forResource: sample.fileName, withExtension: "mp3") else {
-                    print("Could not find audio file: \(sample.fileName)")
+                // Force volume to absolute zero before any connections
+                mixer.outputVolume = 0
+                
+                // Load audio file and create buffer
+                guard let url = Bundle.main.url(forResource: sample.fileName, withExtension: "mp3"),
+                      let file = try? AVAudioFile(forReading: url),
+                      let buffer = try? AVAudioPCMBuffer(pcmFormat: file.processingFormat, 
+                                                        frameCapacity: AVAudioFrameCount(file.length)) else {
+                    print("Could not load audio file: \(sample.fileName)")
                     return
                 }
                 
-                let file = try AVAudioFile(forReading: url)
-                
-                // Create buffer with proper initialization
-                guard let buffer = try AVAudioPCMBuffer(pcmFormat: file.processingFormat, 
-                                                       frameCapacity: AVAudioFrameCount(file.length)) else {
-                    print("Could not create buffer for: \(sample.fileName)")
-                    return
-                }
-                
-                // Read the entire file into the buffer
                 try file.read(into: buffer)
                 
-                // Attach nodes
+                // Disconnect any existing nodes
+                if let existingMixer = self.mixers[sample.id] {
+                    self.engine.disconnectNodeOutput(existingMixer)
+                }
+                
+                // Remove existing nodes
+                if let existingPlayer = self.players[sample.id] {
+                    self.engine.detach(existingPlayer)
+                }
+                
+                // Connect new nodes
                 self.engine.attach(player)
                 self.engine.attach(mixer)
                 self.engine.attach(varispeed)
                 self.engine.attach(timePitch)
                 
-                // Connect nodes
                 self.engine.connect(player, to: varispeed, format: buffer.format)
                 self.engine.connect(varispeed, to: timePitch, format: buffer.format)
                 self.engine.connect(timePitch, to: mixer, format: buffer.format)
                 self.engine.connect(mixer, to: self.engine.mainMixerNode, format: buffer.format)
                 
-                // Store references
+                // Store references AFTER all connections are made
                 self.players[sample.id] = player
                 self.mixers[sample.id] = mixer
                 self.varispeedNodes[sample.id] = varispeed
                 self.timePitchNodes[sample.id] = timePitch
                 self.buffers[sample.id] = buffer
                 
-                // Ensure mixer starts at 0 volume
-                mixer.outputVolume = 0.0
-                
-                // Adjust playback rates before scheduling
-                self.adjustPlaybackRates(for: sample)
+                // Final volume check
+                mixer.outputVolume = 0
                 
                 if self.isPlaying {
-                    // Get the master clock reference
+                    if self.masterStartTime == nil {
+                        self.masterStartTime = AVAudioTime(hostTime: mach_absolute_time())
+                    }
+                    
                     guard let masterStartTime = self.masterStartTime else {
-                        let startTime = AVAudioTime(hostTime: mach_absolute_time() + self.secondsToHostTime(0.1))
-                        self.masterStartTime = startTime
-                        player.scheduleBuffer(buffer, at: startTime, options: [.loops])
-                        player.play()
-                        self.fadeInVolume(for: mixer)
+                        print("No master time reference")
                         return
                     }
                     
-                    // Calculate current position in the loop
                     let currentTime = AVAudioTime(hostTime: mach_absolute_time())
                     let elapsedTime = currentTime.timeIntervalSince(masterStartTime)
-                    let loopPosition = elapsedTime.truncatingRemainder(dividingBy: self.masterLoopDuration)
+                    let loopDuration = 60.0 / self.bpm * 4
+                    let loopPosition = elapsedTime.truncatingRemainder(dividingBy: loopDuration)
                     
-                    // Schedule to start immediately at the correct phase
-                    let startTime = currentTime.offset(seconds: -loopPosition)
+                    let startTime = masterStartTime.offset(seconds: -loopPosition)
                     player.scheduleBuffer(buffer, at: startTime, options: [.loops])
                     player.play()
-                    
-                    // Delayed phase correction
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms delay
-                        if self.isPlaying {
-                            self.checkAndCorrectPhase(for: sample.id)
-                        }
-                    }
-                    
-                    // Start with volume at 0 and fade in
-                    mixer.outputVolume = 0
-                    self.fadeInVolume(for: mixer)
                 } else {
-                    // If not playing, just prepare the buffer with volume at 0
                     player.scheduleBuffer(buffer, at: nil, options: [.loops])
-                    mixer.outputVolume = 0
                 }
                 
-                // Update UI state
                 self.activeSamples.insert(sample.id)
                 
+                // Verify volume one last time
+                DispatchQueue.main.async {
+                    if let finalMixer = self.mixers[sample.id] {
+                        finalMixer.outputVolume = 0
+                    }
+                }
+                
             } catch {
-                print("Error loading audio file: \(error)")
-            }
-        }
-    }
-
-    private func fadeInVolume(for mixer: AVAudioMixerNode) {
-        // Fade in over 1 beat for smoother transition
-        let fadeTime = 60.0 / bpm
-        let steps = 30
-        let stepTime = fadeTime / Double(steps)
-        
-        for i in 0...steps {
-            let volume = Float(i) / Float(steps)
-            DispatchQueue.main.asyncAfter(deadline: .now() + stepTime * Double(i)) {
-                mixer.outputVolume = volume
+                print("Error setting up audio: \(error)")
             }
         }
     }
@@ -913,6 +897,16 @@ class AudioManager: ObservableObject {
                 Task {
                     await self.startAllPlayersInSync()
                 }
+            }
+        }
+    }
+
+    // Add this function
+    func setVolumeForSample(_ sampleId: Int, to volume: Float) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if let mixer = self.mixers[sampleId] {
+                mixer.outputVolume = volume
             }
         }
     }
