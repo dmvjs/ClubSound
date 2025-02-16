@@ -757,17 +757,16 @@ class AudioManager: ObservableObject {
     }
 
     func loopProgress(for sampleId: Int) -> Double {
-        // Since this is called from UI, ensure we're on main thread
-        dispatchPrecondition(condition: .onQueue(.main))
-        
         guard isPlaying, let startTime = masterClock else { return 0.0 }
+        
         let currentTime = AVAudioTime(hostTime: mach_absolute_time())
         let elapsedTime = currentTime.timeIntervalSince(startTime)
+        
+        // Calculate progress based on master loop duration
         let progress = (elapsedTime / masterLoopDuration).truncatingRemainder(dividingBy: 1.0)
         return max(0.0, min(1.0, progress))
     }
 
-    // Add this method to start the timer
     private func startProgressUpdates() {
         // Stop any existing timer
         if let timer = progressUpdateTimer as? Timer {
@@ -777,26 +776,19 @@ class AudioManager: ObservableObject {
         }
         progressUpdateTimer = nil
         
-        // Create new DisplayLink on main thread
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            let displayLink = CADisplayLink(target: self, selector: #selector(self.updateProgress))
-            displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
-            displayLink.add(to: .main, forMode: .common)
-            
-            // Store displayLink
-            self.progressUpdateTimer = displayLink
-        }
+        // Create new DisplayLink with higher priority
+        let displayLink = CADisplayLink(target: self, selector: #selector(updateProgress))
+        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 60)
+        displayLink.add(to: .main, forMode: .common)
+        
+        progressUpdateTimer = displayLink
     }
 
     @objc private func updateProgress() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             // Force UI update on main thread for all observers
-            withAnimation(.linear(duration: 1/30)) {
-                self.objectWillChange.send()
-            }
+            self.objectWillChange.send()
         }
     }
 

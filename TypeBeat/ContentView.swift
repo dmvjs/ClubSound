@@ -56,22 +56,22 @@ struct ContentView: View {
 
                     // Column buttons
                     VStack(alignment: .trailing, spacing: 8) {
-                        BPMIndexView(
-                            groupedSamples: groupedSamples,
-                            activeBPM: activeBPM,
-                            onSelection: { bpm in
-                                handleBPMSelection(bpm, proxy)
-                            }
-                        )
-                        .allowsHitTesting(true)
-                        .zIndex(2)
-
                         KeyIndexView(
                             groupedSamples: groupedSamples,
                             activeKey: activeKey,
                             activeBPM: activeBPM,
                             onSelection: { key in
                                 handleKeySelection(key, proxy)
+                            }
+                        )
+                        .allowsHitTesting(true)
+                        .zIndex(2)
+
+                        BPMIndexView(
+                            groupedSamples: groupedSamples,
+                            activeBPM: activeBPM,
+                            onSelection: { bpm in
+                                handleBPMSelection(bpm, proxy)
                             }
                         )
                         .allowsHitTesting(true)
