@@ -128,23 +128,13 @@ struct TempoButtonRow: View {
             if audioManager.isPlaying {
                 // Stop sequence
                 DispatchQueue.main.async {
-                    // Update UI state immediately
-                    audioManager.isPlaying = false
-                    // Stop audio on background thread
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        audioManager.stopAllPlayers()
-                    }
+                    audioManager.stopAllPlayers() // This method already handles thread safety
                 }
             } else {
                 // Start sequence
                 DispatchQueue.main.async {
-                    // First update UI
                     audioManager.isPlaying = true
-                    
-                    // Then start audio with slight delay to allow UI update
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        audioManager.startAllPlayersInSync()
-                    }
+                    audioManager.startAllPlayersInSync() // This method already handles thread safety
                 }
             }
         }) {

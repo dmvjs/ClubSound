@@ -7,15 +7,16 @@ struct NowPlayingRow: View {
     let remove: () -> Void
     let keyColor: Color
     @ObservedObject var audioManager: AudioManager
-
+    
     var body: some View {
         HStack(spacing: 4) {
             // Circle with progress ring
             ZStack {
                 Circle()
-                    .trim(from: 0, to: CGFloat(audioManager.loopProgress()))  // Direct call instead of state
+                    .trim(from: 0, to: CGFloat(audioManager.loopProgress(for: sample.id)))
                     .stroke(Color.white.opacity(0.8), lineWidth: 3)
                     .rotationEffect(.degrees(-90))
+                    .animation(.linear(duration: 1/30), value: audioManager.loopProgress(for: sample.id))
                 
                 Circle()
                     .fill(sample.keyColor())
@@ -40,15 +41,14 @@ struct NowPlayingRow: View {
                 .accentColor(sample.keyColor())
                 .frame(width: 150)
                 .padding(8)
-
         }
         .listRowSeparator(.hidden)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color(.systemGray6).opacity(0.4))
         )
-        .padding(.vertical, -4) // Reduce vertical padding
-        .listRowBackground(Color.black.opacity(0.9)) // Match list background
+        .padding(.vertical, -4)
+        .listRowBackground(Color.black.opacity(0.9))
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 remove()

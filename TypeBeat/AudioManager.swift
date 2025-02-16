@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Combine
+import SwiftUI
 
 class AudioManager: ObservableObject {
     static let shared = AudioManager()
@@ -24,9 +25,12 @@ class AudioManager: ObservableObject {
     // Master Clock Properties
     @Published private var masterClock: AVAudioTime?
     private var masterLoopFrames: AVAudioFramePosition = 0
+    private let beatsPerBar = 4.0
+    private let totalBars = 16.0
     private var masterLoopDuration: TimeInterval {
-        // 16 bars * 4 beats per bar * seconds per beat
-        16.0 * 4.0 * (60.0 / bpm)
+        let totalBeats = beatsPerBar * totalBars  // 4 beats/bar * 16 bars = 64 beats
+        let secondsPerBeat = 60.0 / bpm
+        return totalBeats * secondsPerBeat
     }
     private var sampleRate: Double {
         engine.outputNode.outputFormat(forBus: 0).sampleRate
@@ -48,6 +52,9 @@ class AudioManager: ObservableObject {
     private var lastKnownPosition: [Int: AVAudioFramePosition] = [:]
     private let maxPhaseDrift: Double = 0.0005 // 0.5ms maximum drift
 
+    // Update the timer property to use Any
+    private var progressUpdateTimer: Any?
+    
     private init() {
         setupAudioSession()
         setupEngine()
@@ -84,30 +91,34 @@ class AudioManager: ObservableObject {
     }
     
     private func updateMasterClock(newBPM: Double) {
-        guard isPlaying else { return }
-        
-        // Initialize master clock if needed
-        if masterClock == nil {
-            masterClock = AVAudioTime(hostTime: mach_absolute_time())
-            return
-        }
-        
-        // Calculate current phase position
-        let currentTime = AVAudioTime(hostTime: mach_absolute_time())
-        
-        // Safely unwrap masterClock
-        guard let currentMasterClock = masterClock else { return }
-        
-        let elapsedTime = currentTime.timeIntervalSince(currentMasterClock)
-        let currentPhase = elapsedTime.truncatingRemainder(dividingBy: masterLoopDuration)
-        
-        // Update master clock to maintain phase
-        masterClock = currentTime.offset(seconds: -currentPhase)
-        masterLoopFrames = AVAudioFramePosition(masterLoopDuration * sampleRate)
-        
-        // Resync all active samples
-        for sampleId in activeSamples {
-            resyncSample(sampleId)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Initialize master clock if needed
+            if self.masterClock == nil {
+                self.masterClock = AVAudioTime(hostTime: mach_absolute_time())
+                return
+            }
+            
+            // Calculate current phase position
+            let currentTime = AVAudioTime(hostTime: mach_absolute_time())
+            
+            // Safely unwrap masterClock
+            guard let currentMasterClock = self.masterClock else { return }
+            
+            let elapsedTime = currentTime.timeIntervalSince(currentMasterClock)
+            let currentPhase = elapsedTime.truncatingRemainder(dividingBy: self.masterLoopDuration)
+            
+            // Update master clock to maintain phase
+            self.masterClock = currentTime.offset(seconds: -currentPhase)
+            self.masterLoopFrames = AVAudioFramePosition(self.masterLoopDuration * self.sampleRate)
+            
+            // Resync all active samples
+            DispatchQueue.global(qos: .userInitiated).async {
+                for sampleId in self.activeSamples {
+                    self.resyncSample(sampleId)
+                }
+            }
         }
     }
     
@@ -353,62 +364,66 @@ class AudioManager: ObservableObject {
     }
     
     func addSampleToPlay(_ sample: Sample) {
-        // Create nodes
-        let player = AVAudioPlayerNode()
-        let mixer = AVAudioMixerNode()
-        let varispeed = AVAudioUnitVarispeed()
-        let timePitch = AVAudioUnitTimePitch()
-
-        // Ensure we're on the main thread for UI updates
-        DispatchQueue.main.async {
-            self.engine.attach(player)
-            self.engine.attach(varispeed)
-            self.engine.attach(timePitch)
-            self.engine.attach(mixer)
-        }
-
-        guard let url = Bundle.main.url(forResource: sample.fileName, withExtension: "mp3") else {
-            print("Could not find file \(sample.fileName)")
-            return
-        }
-
-        do {
-            let file = try AVAudioFile(forReading: url)
-            let processingFormat = file.processingFormat
-            let frameCount = AVAudioFrameCount(file.length)
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: processingFormat, frameCapacity: frameCount) else { return }
-            try file.read(into: buffer)
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
             
-            // Store buffer before connecting nodes
-            buffers[sample.id] = buffer
-            
-            // Connect nodes on main thread
+            // Create nodes
+            let player = AVAudioPlayerNode()
+            let mixer = AVAudioMixerNode()
+            let varispeed = AVAudioUnitVarispeed()
+            let timePitch = AVAudioUnitTimePitch()
+
+            // Ensure we're on the main thread for UI updates
             DispatchQueue.main.async {
-                self.engine.connect(player, to: varispeed, format: processingFormat)
-                self.engine.connect(varispeed, to: timePitch, format: processingFormat)
-                self.engine.connect(timePitch, to: mixer, format: processingFormat)
-                self.engine.connect(mixer, to: self.engine.mainMixerNode, format: processingFormat)
-
-                // Store nodes
-                self.players[sample.id] = player
-                self.mixers[sample.id] = mixer
-                self.varispeedNodes[sample.id] = varispeed
-                self.timePitchNodes[sample.id] = timePitch
-
-                // Ensure mixer starts at 0 volume
-                mixer.outputVolume = 0.0
-                
-                // Adjust playback rates before scheduling
-                self.adjustPlaybackRates(for: sample)
-                
-                // Schedule with precise timing
-                self.scheduleAndPlay(player, buffer: buffer, sampleId: sample.id)
-                
-                // Update UI state
-                self.activeSamples.insert(sample.id)
+                self.engine.attach(player)
+                self.engine.attach(varispeed)
+                self.engine.attach(timePitch)
+                self.engine.attach(mixer)
             }
-        } catch {
-            print("Error loading audio file: \(error)")
+
+            guard let url = Bundle.main.url(forResource: sample.fileName, withExtension: "mp3") else {
+                print("Could not find file \(sample.fileName)")
+                return
+            }
+
+            do {
+                let file = try AVAudioFile(forReading: url)
+                let processingFormat = file.processingFormat
+                let frameCount = AVAudioFrameCount(file.length)
+                guard let buffer = AVAudioPCMBuffer(pcmFormat: processingFormat, frameCapacity: frameCount) else { return }
+                try file.read(into: buffer)
+                
+                // Store buffer before connecting nodes
+                self.buffers[sample.id] = buffer
+                
+                // Connect nodes on main thread
+                DispatchQueue.main.async {
+                    self.engine.connect(player, to: varispeed, format: processingFormat)
+                    self.engine.connect(varispeed, to: timePitch, format: processingFormat)
+                    self.engine.connect(timePitch, to: mixer, format: processingFormat)
+                    self.engine.connect(mixer, to: self.engine.mainMixerNode, format: processingFormat)
+
+                    // Store nodes
+                    self.players[sample.id] = player
+                    self.mixers[sample.id] = mixer
+                    self.varispeedNodes[sample.id] = varispeed
+                    self.timePitchNodes[sample.id] = timePitch
+
+                    // Ensure mixer starts at 0 volume
+                    mixer.outputVolume = 0.0
+                    
+                    // Adjust playback rates before scheduling
+                    self.adjustPlaybackRates(for: sample)
+                    
+                    // Schedule with precise timing
+                    self.scheduleAndPlay(player, buffer: buffer, sampleId: sample.id)
+                    
+                    // Update UI state
+                    self.activeSamples.insert(sample.id)
+                }
+            } catch {
+                print("Error loading audio file: \(error)")
+            }
         }
     }
 
@@ -417,26 +432,18 @@ class AudioManager: ObservableObject {
     }
     
     func togglePlayback() {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
-            // Update UI state on main thread
-            DispatchQueue.main.async {
-                self.isPlaying.toggle()
-            }
+            self.isPlaying.toggle()
             
             if self.isPlaying {
-                // Audio operations on background thread
-                self.referenceStartTime = AVAudioTime(hostTime: mach_absolute_time() + self.secondsToHostTime(0.1))
-                
-                for (sampleId, player) in self.players {
-                    guard let buffer = self.buffers[sampleId] else { continue }
-                    player.stop()
-                    player.scheduleBuffer(buffer, at: self.referenceStartTime!, options: .loops)
-                    player.play()
+                DispatchQueue.global(qos: .userInitiated).async {
+                    self.startAllPlayersInSync()
                 }
             } else {
-                self.stopAllPlayers()
+                DispatchQueue.global(qos: .userInitiated).async {
+                    self.stopAllPlayers()
+                }
             }
         }
     }
@@ -546,7 +553,7 @@ class AudioManager: ObservableObject {
     }
     
     func setVolume(for sample: Sample, volume: Float) {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        DispatchQueue.main.async { [weak self] in
             guard let self = self,
                   let mixer = self.mixers[sample.id] else { return }
             mixer.outputVolume = volume
@@ -575,11 +582,28 @@ class AudioManager: ObservableObject {
     }
 
     public func stopAllPlayers() {
-        // Stop immediately
-        for player in players.values {
-            player.stop()
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.isPlaying = false
+            
+            // Stop the progress updates
+            if let timer = self.progressUpdateTimer as? Timer {
+                timer.invalidate()
+            } else if let displayLink = self.progressUpdateTimer as? CADisplayLink {
+                displayLink.invalidate()
+            }
+            self.progressUpdateTimer = nil
+            
+            // Stop all players on background thread
+            DispatchQueue.global(qos: .userInitiated).async {
+                for player in self.players.values {
+                    player.stop()
+                }
+                DispatchQueue.main.async {
+                    self.masterClock = nil
+                }
+            }
         }
-        masterClock = nil
     }
     
     private func secondsToHostTime(_ seconds: Double) -> UInt64 {
@@ -700,16 +724,79 @@ class AudioManager: ObservableObject {
     }
 
     func startAllPlayersInSync() {
-        // Calculate a precise start time just slightly in the future
-        let startTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.05))
-        masterClock = startTime
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // Calculate start time slightly in the future
+            let startTime = AVAudioTime(hostTime: mach_absolute_time() + self.secondsToHostTime(0.05))
+            self.masterClock = startTime
+            
+            // Start players on background thread
+            DispatchQueue.global(qos: .userInitiated).async {
+                for (sampleId, player) in self.players {
+                    guard let buffer = self.buffers[sampleId] else { continue }
+                    player.stop() // Ensure clean state
+                    
+                    player.scheduleBuffer(buffer, 
+                                        at: startTime, 
+                                        options: [.loops, .interruptsAtLoop],
+                                        completionCallbackType: .dataPlayedBack) { _ in
+                        DispatchQueue.main.async {
+                            self.objectWillChange.send()
+                        }
+                    }
+                    player.play(at: startTime)
+                }
+                
+                // Start progress updates on main thread
+                DispatchQueue.main.async {
+                    self.startProgressUpdates()
+                }
+            }
+        }
+    }
+
+    func loopProgress(for sampleId: Int) -> Double {
+        // Since this is called from UI, ensure we're on main thread
+        dispatchPrecondition(condition: .onQueue(.main))
         
-        // Schedule all players to start exactly at this time
-        for (sampleId, player) in players {
-            guard let buffer = buffers[sampleId] else { continue }
-            player.stop() // Ensure clean state
-            player.scheduleBuffer(buffer, at: startTime, options: [.loops, .interruptsAtLoop])
-            player.play(at: startTime)
+        guard isPlaying, let startTime = masterClock else { return 0.0 }
+        let currentTime = AVAudioTime(hostTime: mach_absolute_time())
+        let elapsedTime = currentTime.timeIntervalSince(startTime)
+        let progress = (elapsedTime / masterLoopDuration).truncatingRemainder(dividingBy: 1.0)
+        return max(0.0, min(1.0, progress))
+    }
+
+    // Add this method to start the timer
+    private func startProgressUpdates() {
+        // Stop any existing timer
+        if let timer = progressUpdateTimer as? Timer {
+            timer.invalidate()
+        } else if let displayLink = progressUpdateTimer as? CADisplayLink {
+            displayLink.invalidate()
+        }
+        progressUpdateTimer = nil
+        
+        // Create new DisplayLink on main thread
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            let displayLink = CADisplayLink(target: self, selector: #selector(self.updateProgress))
+            displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
+            displayLink.add(to: .main, forMode: .common)
+            
+            // Store displayLink
+            self.progressUpdateTimer = displayLink
+        }
+    }
+
+    @objc private func updateProgress() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            // Force UI update on main thread for all observers
+            withAnimation(.linear(duration: 1/30)) {
+                self.objectWillChange.send()
+            }
         }
     }
 
