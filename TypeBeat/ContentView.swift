@@ -166,53 +166,24 @@ struct ContentView: View {
     }
 
     private func handleBPMSelection(_ bpm: Double, _ proxy: ScrollViewProxy) {
-        // Ensure all UI and state updates happen on main thread
-        DispatchQueue.main.async {
-            withAnimation {
-                // First update the UI state
-                self.activeBPM = bpm
-                
-                // If current key exists in new BPM, keep it and scroll there
-                let keysForNewBPM = self.groupedSamples
-                    .first(where: { $0.0 == bpm })?
-                    .1
-                    .map { $0.0 } ?? []
-                
-                if let currentKey = self.activeKey, !keysForNewBPM.contains(currentKey) {
-                    self.activeKey = nil
-                }
-                
-                // Then update the audio manager
-                self.audioManager.updateBPM(to: bpm)
-                
-                // Scroll to BPM section
-                proxy.scrollTo("\(Int(bpm))", anchor: .top)
-            }
-            
-            // Haptic feedback
-            let generator = UIImpactFeedbackGenerator(style: .medium)
-            generator.impactOccurred()
+        // Only scroll, don't change BPM
+        withAnimation {
+            proxy.scrollTo("\(Int(bpm))", anchor: .top)
         }
+        
+        // Haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
     }
 
     private func handleKeySelection(_ key: MusicKey, _ proxy: ScrollViewProxy) {
         withAnimation {
-            activeKey = key
-
-            // If we don't have a BPM selected, find first BPM that has this key
-            if activeBPM == nil {
-                if let firstBPMWithKey = groupedSamples.first(where: { _, keyGroups in
-                    keyGroups.contains { $0.0 == key }
-                }) {
-                    activeBPM = firstBPMWithKey.0
-                }
-            }
-
-            // Now scroll to the key section if we have a BPM
+            // Only scroll if we have an active BPM
             if let bpm = activeBPM {
                 proxy.scrollTo("\(Int(bpm))-\(key.rawValue)", anchor: .top)
             }
         }
+        
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
     }
