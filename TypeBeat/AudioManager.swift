@@ -309,13 +309,12 @@ class AudioManager: ObservableObject {
             masterClock = startTime
             masterLoopFrames = framesPerLoop
             
+            // Only schedule the buffer, don't play it
             player.scheduleBuffer(buffer, at: startTime, options: .loops)
-            player.play(at: startTime)
-            isPlaying = true
-            return
+            return  // Don't start playing or set isPlaying to true
         }
         
-        // All songs use the exact same reference start time
+        // If we're already playing, schedule and play immediately
         player.scheduleBuffer(buffer, at: masterClock, options: .loops)
         player.play(at: masterClock)
     }
@@ -415,7 +414,7 @@ class AudioManager: ObservableObject {
                     // Adjust playback rates before scheduling
                     self.adjustPlaybackRates(for: sample)
                     
-                    // Schedule with precise timing
+                    // Schedule with precise timing but don't force play
                     self.scheduleAndPlay(player, buffer: buffer, sampleId: sample.id)
                     
                     // Update UI state
