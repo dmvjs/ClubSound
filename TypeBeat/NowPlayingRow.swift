@@ -14,14 +14,19 @@ struct NowPlayingRow: View {
         HStack(spacing: 4) {
             // Circle with progress ring
             ZStack {
+                // Background track (invisible but maintains spacing)
+                Circle()
+                    .stroke(Color.clear, lineWidth: 2)
+                    .frame(width: 39, height: 39)
+                
                 Circle()
                     .trim(from: 0, to: CGFloat(progress))
                     .stroke(sample.keyColor(), lineWidth: 3)
                     .rotationEffect(.degrees(-90))
                 
                 Circle()
-                    .fill(Color(.systemBackground))
-                    .frame(width: 33, height: 33)
+                    .fill(Color(.secondarySystemBackground))
+                    .frame(width: 35, height: 35)
                     .overlay(
                         Text("\(sample.bpm, specifier: "%.0f")")
                             .font(.system(size: 12, weight: .bold))

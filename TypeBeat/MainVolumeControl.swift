@@ -14,7 +14,7 @@ struct MainVolumeControl: View {
     @State private var progress: Double = 0
     
     var body: some View {
-        HStack {
+        HStack(spacing: 4) {
             // BPM Circle with progress ring
             ZStack {
                 // Background track (iOS system gray)
@@ -32,23 +32,22 @@ struct MainVolumeControl: View {
                 
                 // Center circle
                 Circle()
-                    .fill(Color(.systemGray6))
+                    .fill(Color(.secondarySystemBackground))
                     .frame(width: 35, height: 35)
                     .overlay(
                         Text("\(Int(audioManager.bpm))")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.primary)
+                            .foregroundColor(.white)
                     )
             }
-            .padding(8)
+            .padding(5)
             .onAppear {
-                // Start the progress updates when view appears
                 startProgressUpdates()
             }
 
             Text("main.volume".localized)
                 .font(.subheadline)
-                .foregroundColor(.primary)
+                .foregroundColor(.white)
                 .lineLimit(2)
             Spacer()
 
@@ -64,11 +63,10 @@ struct MainVolumeControl: View {
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color(.systemGray6).opacity(0.4))
         )
-        .padding(.top, 8)
+        .padding(.vertical, -2)
     }
     
     private func startProgressUpdates() {
-        // Create a timer that updates more frequently
         Timer.scheduledTimer(withTimeInterval: 1/30, repeats: true) { _ in
             if audioManager.isPlaying {
                 progress = audioManager.loopProgress()
