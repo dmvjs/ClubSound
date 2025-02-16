@@ -46,7 +46,7 @@ struct LanguageSelectionView: View {
                 }
                 Button("language.change.confirm".localized) {
                     if let newLanguage = pendingLanguage {
-                        AudioManager.shared.stopAllPlayback()
+                        AudioManager.shared.stopAllPlayers()
                         UserDefaults.standard.set(newLanguage, forKey: "AppLanguage")
                         UserDefaults.standard.synchronize()
                         dismiss()

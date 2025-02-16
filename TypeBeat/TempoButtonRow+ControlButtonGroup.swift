@@ -32,13 +32,9 @@ struct ControlButtonGroup: View {
             generator.impactOccurred()
             
             if audioManager.isPlaying {
-                DispatchQueue.main.async {
-                    audioManager.stopAllPlayers()
-                }
+                audioManager.stopAllPlayers()
             } else {
-                DispatchQueue.main.async {
-                    audioManager.play()
-                }
+                audioManager.play()
             }
         }) {
             ZStack {
