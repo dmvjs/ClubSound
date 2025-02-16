@@ -472,11 +472,11 @@ class AudioManager: ObservableObject {
                 if self.isPlaying {
                     // Get the master clock reference
                     guard let masterStartTime = self.masterStartTime else {
-                        // If no master time, create one
                         let startTime = AVAudioTime(hostTime: mach_absolute_time() + self.secondsToHostTime(0.1))
                         self.masterStartTime = startTime
                         player.scheduleBuffer(buffer, at: startTime, options: [.loops])
                         player.play()
+                        self.fadeInVolume(for: mixer)
                         return
                     }
                     
@@ -490,16 +490,21 @@ class AudioManager: ObservableObject {
                     player.scheduleBuffer(buffer, at: startTime, options: [.loops])
                     player.play()
                     
-                    // Start monitoring phase
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self.checkAndCorrectPhase(for: sample.id)
+                    // Delayed phase correction
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms delay
+                        if self.isPlaying {
+                            self.checkAndCorrectPhase(for: sample.id)
+                        }
                     }
                     
-                    // Fade in the volume
+                    // Start with volume at 0 and fade in
+                    mixer.outputVolume = 0
                     self.fadeInVolume(for: mixer)
                 } else {
-                    // If not playing, just prepare the buffer
+                    // If not playing, just prepare the buffer with volume at 0
                     player.scheduleBuffer(buffer, at: nil, options: [.loops])
+                    mixer.outputVolume = 0
                 }
                 
                 // Update UI state
@@ -512,8 +517,8 @@ class AudioManager: ObservableObject {
     }
 
     private func fadeInVolume(for mixer: AVAudioMixerNode) {
-        // Fade in over 2 beats
-        let fadeTime = 60.0 / bpm * 2
+        // Fade in over 1 beat for smoother transition
+        let fadeTime = 60.0 / bpm
         let steps = 30
         let stepTime = fadeTime / Double(steps)
         
