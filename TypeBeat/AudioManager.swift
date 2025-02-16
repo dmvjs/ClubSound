@@ -299,18 +299,11 @@ class AudioManager: ObservableObject {
     func loopProgress() -> Double {
         guard isPlaying, let masterClock = masterClock else { return 0.0 }
         
-        let now = AVAudioTime(hostTime: mach_absolute_time())
-        let elapsedTime = now.timeIntervalSince(masterClock)
+        let currentTime = AVAudioTime(hostTime: mach_absolute_time())
+        let elapsedTime = currentTime.timeIntervalSince(masterClock)
         
-        // Calculate total duration for 16 bars at current BPM
-        let beatsPerBar = 4.0
-        let totalBars = 16.0
-        let totalBeats = totalBars * beatsPerBar
-        let secondsPerBeat = 60.0 / bpm
-        let totalDuration = totalBeats * secondsPerBeat
-        
-        // Calculate progress from master clock
-        let progress = elapsedTime.truncatingRemainder(dividingBy: totalDuration) / totalDuration
+        // Calculate progress based on master loop duration
+        let progress = elapsedTime.truncatingRemainder(dividingBy: masterLoopDuration) / masterLoopDuration
         return max(0.0, min(1.0, progress))
     }
     
@@ -807,7 +800,7 @@ class AudioManager: ObservableObject {
         }
         progressUpdateTimer = nil
         
-        // Create new DisplayLink with higher priority and faster update rate
+        // Create new DisplayLink
         let displayLink = CADisplayLink(target: self, selector: #selector(updateProgress))
         displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
         displayLink.add(to: .main, forMode: .common)
@@ -816,7 +809,10 @@ class AudioManager: ObservableObject {
     }
 
     @objc private func updateProgress() {
-        self.objectWillChange.send()
+        // Force UI update
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+        }
     }
 
     // Add this public method
