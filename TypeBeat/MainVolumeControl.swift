@@ -37,7 +37,7 @@ struct MainVolumeControl: View {
                     .overlay(
                         Text("\(Int(audioManager.bpm))")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.secondary)
                     )
             }
             .padding(5)
