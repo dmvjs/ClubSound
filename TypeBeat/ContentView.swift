@@ -167,7 +167,8 @@ struct ContentView: View {
 
     private func handleBPMSelection(_ bpm: Double, _ proxy: ScrollViewProxy) {
         withAnimation {
-            // Update BPM first
+            // Update BPM using the correct method name
+            audioManager.updateBPM(to: bpm)
             activeBPM = bpm
 
             // If current key exists in new BPM, keep it and scroll there
@@ -177,7 +178,6 @@ struct ContentView: View {
                 .map { $0.0 } ?? []
 
             if let currentKey = activeKey, !keysForNewBPM.contains(currentKey) {
-                // If current key doesn't exist in new BPM, clear it
                 activeKey = nil
             }
 
