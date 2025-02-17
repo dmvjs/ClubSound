@@ -34,7 +34,7 @@ struct ContentView: View {
                             // Spacer using safe area insets
                             Color.clear
                                 .frame(height: maxButtonSize)
-                                .padding(.top, safeAreaInsets.top)
+                                .padding(.top, 0)
 
                             // Rest of content
                             SampleScrollView(
@@ -84,11 +84,10 @@ struct ContentView: View {
 
                         // Top button row - now at ZStack level
                         HStack {
-                            Spacer()
                             TempoButtonRow(audioManager: audioManager)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.top, safeAreaInsets.top)
+                        .padding(.top, 0)
                         .zIndex(2)
                     }
                     .background(Color.black)

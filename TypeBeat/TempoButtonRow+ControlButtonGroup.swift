@@ -21,7 +21,7 @@ struct ControlButtonGroup: View {
         AudioOutputPicker()
             .frame(width: buttonSize, height: buttonSize)
             .background(Circle().fill(Color.blue))
-            .shadow(color: .blue.opacity(0.4), radius: 8, x: 0, y: 4)
+            .shadow(color: .blue.opacity(0.4), radius: 7, x: 0, y: 4)
     }
     
     private var playPauseButton: some View {
@@ -47,7 +47,7 @@ struct ControlButtonGroup: View {
             }
             .frame(width: buttonSize, height: buttonSize)
             .scaleEffect(audioManager.isPlaying ? 1.0 : breatheScale)
-            .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+            .shadow(color: .black.opacity(0.3), radius: 7, x: 0, y: 4)
         }
         .accessibilityLabel(audioManager.isPlaying ? "stop".localized : "play".localized)
         .animation(.easeInOut, value: audioManager.isPlaying)
@@ -65,7 +65,7 @@ struct ControlButtonGroup: View {
                     Circle()
                         .fill(audioManager.pitchLock ? Color.green : Color.gray.opacity(0.3))
                 )
-                .shadow(color: audioManager.pitchLock ? Color.green.opacity(0.4) : .clear, radius: 8, x: 0, y: 4)
+                .shadow(color: audioManager.pitchLock ? Color.green.opacity(0.4) : .clear, radius: 7, x: 0, y: 4)
         }
         .accessibilityLabel("lock_pitch".localized)
     }
@@ -86,7 +86,7 @@ struct ControlButtonGroup: View {
                     Circle()
                         .fill(wakeLockManager.isWakeLockEnabled ? Color.green : Color.gray.opacity(0.3))
                 )
-                .shadow(color: wakeLockManager.isWakeLockEnabled ? Color.green.opacity(0.4) : .clear, radius: 8, x: 0, y: 4)
+                .shadow(color: wakeLockManager.isWakeLockEnabled ? Color.green.opacity(0.4) : .clear, radius: 7, x: 0, y: 4)
         }
         .accessibilityLabel("wake_lock".localized)
     }

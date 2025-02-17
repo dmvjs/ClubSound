@@ -15,9 +15,9 @@ struct NowPlayingRow: View {
         HStack(spacing: 4) {
             // Circle with progress ring
             ZStack {
-                // Background track (invisible but maintains spacing)
+                // Background track (iOS system gray)
                 Circle()
-                    .stroke(Color.clear, lineWidth: 2)
+                    .stroke(Color(.systemGray4), lineWidth: 2)
                     .frame(width: 39, height: 39)
                 
                 Circle()
