@@ -426,105 +426,67 @@ class AudioManager: ObservableObject {
         }
     }
     
-    func addSampleToPlay(_ sample: Sample) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            guard !self.players.keys.contains(sample.id) else { return }
+    func addSampleToPlay(_ sample: Sample) async {
+        do {
+            // Create and configure nodes
+            let player = AVAudioPlayerNode()
+            let mixer = AVAudioMixerNode()
+            let varispeed = AVAudioUnitVarispeed()
+            let timePitch = AVAudioUnitTimePitch()
             
-            do {
-                // Stop any existing playback for this sample
-                if let existingMixer = self.mixers[sample.id] {
-                    existingMixer.outputVolume = 0
-                    if let existingPlayer = self.players[sample.id] {
-                        existingPlayer.stop()
-                    }
-                }
-                
-                // Create and configure nodes
-                let player = AVAudioPlayerNode()
-                let mixer = AVAudioMixerNode()
-                let varispeed = AVAudioUnitVarispeed()
-                let timePitch = AVAudioUnitTimePitch()
-                
-                // Force volume to absolute zero before any connections
-                mixer.outputVolume = 0
-                
-                // Load audio file and create buffer
-                guard let url = Bundle.main.url(forResource: sample.fileName, withExtension: "mp3"),
-                      let file = try? AVAudioFile(forReading: url),
-                      let buffer = try? AVAudioPCMBuffer(pcmFormat: file.processingFormat, 
-                                                        frameCapacity: AVAudioFrameCount(file.length)) else {
-                    print("Could not load audio file: \(sample.fileName)")
-                    return
-                }
-                
-                try file.read(into: buffer)
-                
-                // Disconnect any existing nodes
-                if let existingMixer = self.mixers[sample.id] {
-                    self.engine.disconnectNodeOutput(existingMixer)
-                }
-                
-                // Remove existing nodes
-                if let existingPlayer = self.players[sample.id] {
-                    self.engine.detach(existingPlayer)
-                }
-                
-                // Connect new nodes
-                self.engine.attach(player)
-                self.engine.attach(mixer)
-                self.engine.attach(varispeed)
-                self.engine.attach(timePitch)
-                
-                self.engine.connect(player, to: varispeed, format: buffer.format)
-                self.engine.connect(varispeed, to: timePitch, format: buffer.format)
-                self.engine.connect(timePitch, to: mixer, format: buffer.format)
-                self.engine.connect(mixer, to: self.engine.mainMixerNode, format: buffer.format)
-                
-                // Store references AFTER all connections are made
-                self.players[sample.id] = player
-                self.mixers[sample.id] = mixer
-                self.varispeedNodes[sample.id] = varispeed
-                self.timePitchNodes[sample.id] = timePitch
-                self.buffers[sample.id] = buffer
-                
-                // Final volume check
-                mixer.outputVolume = 0
-                
-                if self.isPlaying {
-                    if self.masterStartTime == nil {
-                        self.masterStartTime = AVAudioTime(hostTime: mach_absolute_time())
-                    }
-                    
-                    guard let masterStartTime = self.masterStartTime else {
-                        print("No master time reference")
-                        return
-                    }
-                    
-                    let currentTime = AVAudioTime(hostTime: mach_absolute_time())
-                    let elapsedTime = currentTime.timeIntervalSince(masterStartTime)
-                    let loopDuration = 60.0 / self.bpm * 4
-                    let loopPosition = elapsedTime.truncatingRemainder(dividingBy: loopDuration)
-                    
-                    let startTime = masterStartTime.offset(seconds: -loopPosition)
-                    player.scheduleBuffer(buffer, at: startTime, options: [.loops])
-                    player.play()
-                } else {
-                    player.scheduleBuffer(buffer, at: nil, options: [.loops])
-                }
-                
-                self.activeSamples.insert(sample.id)
-                
-                // Verify volume one last time
-                DispatchQueue.main.async {
-                    if let finalMixer = self.mixers[sample.id] {
-                        finalMixer.outputVolume = 0
-                    }
-                }
-                
-            } catch {
-                print("Error setting up audio: \(error)")
+            // Force volume to zero initially
+            mixer.outputVolume = 0
+            
+            // Load and setup buffer
+            guard let url = Bundle.main.url(forResource: sample.fileName, withExtension: "mp3"),
+                  let file = try? AVAudioFile(forReading: url),
+                  let buffer = try? AVAudioPCMBuffer(pcmFormat: file.processingFormat, 
+                                                    frameCapacity: AVAudioFrameCount(file.length)) else {
+                print("Could not load audio file: \(sample.fileName)")
+                return
             }
+            
+            try file.read(into: buffer)
+            
+            // Setup nodes
+            engine.attach(player)
+            engine.attach(mixer)
+            engine.attach(varispeed)
+            engine.attach(timePitch)
+            
+            engine.connect(player, to: varispeed, format: buffer.format)
+            engine.connect(varispeed, to: timePitch, format: buffer.format)
+            engine.connect(timePitch, to: mixer, format: buffer.format)
+            engine.connect(mixer, to: engine.mainMixerNode, format: buffer.format)
+            
+            // Store references
+            players[sample.id] = player
+            mixers[sample.id] = mixer
+            varispeedNodes[sample.id] = varispeed
+            timePitchNodes[sample.id] = timePitch
+            buffers[sample.id] = buffer
+            
+            // If playing, sync with master clock
+            if isPlaying, let masterStartTime = masterStartTime {
+                player.scheduleBuffer(buffer, 
+                                    at: masterStartTime,
+                                    options: [.loops],
+                                    completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                    guard let self = self, self.isPlaying else { return }
+                    self.checkAndCorrectPhase(for: sample.id)
+                }
+                player.play()
+            }
+            
+            // Always adjust playback rate, whether playing or not
+            adjustPlaybackRates(for: sample)
+            
+            await MainActor.run {
+                activeSamples.insert(sample.id)
+            }
+            
+        } catch {
+            print("Error adding sample: \(error)")
         }
     }
 
@@ -911,6 +873,35 @@ class AudioManager: ObservableObject {
             guard let self = self else { return }
             if let mixer = self.mixers[sampleId] {
                 mixer.outputVolume = volume
+            }
+        }
+    }
+
+    func play(startingAt progress: Double = 0.0) {
+        Task { @MainActor in
+            isPlaying = true
+            
+            // Calculate the offset time based on progress
+            let offsetTime = self.masterLoopDuration * progress
+            
+            // Create start time with the offset
+            let startTime = AVAudioTime(hostTime: mach_absolute_time() + self.secondsToHostTime(0.01))
+            self.masterStartTime = startTime.offset(seconds: -offsetTime)
+            
+            // Schedule all players with the offset
+            for (sampleId, player) in self.players {
+                guard let buffer = self.buffers[sampleId] else { continue }
+                
+                player.stop()
+                player.scheduleBuffer(buffer, 
+                                    at: startTime,
+                                    options: [.loops],
+                                    completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                    guard let self = self, self.isPlaying else { return }
+                    self.checkAndCorrectPhase(for: sampleId)
+                }
+                
+                player.play(at: startTime)
             }
         }
     }
