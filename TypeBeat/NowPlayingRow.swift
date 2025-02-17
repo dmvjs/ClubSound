@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import QuartzCore
 
 struct NowPlayingRow: View {
     let sample: Sample
@@ -14,15 +15,22 @@ struct NowPlayingRow: View {
         HStack(spacing: 4) {
             // Circle with progress ring
             ZStack {
-                // Background track (invisible but maintains spacing)
+                // Background track (iOS system gray)
                 Circle()
-                    .stroke(Color.clear, lineWidth: 2)
+                    .stroke(Color(.systemGray4), lineWidth: 2)
                     .frame(width: 39, height: 39)
                 
                 Circle()
                     .trim(from: 0, to: CGFloat(progress))
                     .stroke(sample.keyColor(), lineWidth: 3)
                     .rotationEffect(.degrees(-90))
+                    .accessibilityValue(String(format: "%.2f", progress))
+                    .accessibilityIdentifier("progress-ring-\(sample.id)")
+                    .overlay(
+                        Text(String(format: "%.4f", progress))
+                            .opacity(0)
+                            .accessibilityIdentifier("phase-\(sample.id)")
+                    )
                 
                 Circle()
                     .fill(Color(.secondarySystemBackground))
@@ -35,11 +43,10 @@ struct NowPlayingRow: View {
             }
             .frame(width: 39, height: 39)
             .padding(5)
-            .onReceive(Timer.publish(every: 1/30, on: .main, in: .common).autoconnect()) { _ in
+            // Update the progress using a Timer publisher at ~60fps
+            .onReceive(Timer.publish(every: 1/60, on: .main, in: .common).autoconnect()) { _ in
                 if audioManager.isPlaying {
-                    withAnimation(.linear(duration: 1/30)) {
-                        progress = audioManager.loopProgress(for: sample.id)
-                    }
+                    progress = audioManager.loopProgress()
                 } else {
                     progress = 0
                 }
@@ -56,6 +63,7 @@ struct NowPlayingRow: View {
                 .accentColor(sample.keyColor())
                 .frame(width: 150)
                 .padding(8)
+                .accessibilityIdentifier("Volume Slider")
         }
         .listRowSeparator(.hidden)
         .background(
@@ -70,6 +78,40 @@ struct NowPlayingRow: View {
             } label: {
                 Label("action.remove".localized, systemImage: "trash")
             }
+            .accessibilityIdentifier("delete-button")
         }
+    }
+}
+
+// Separate class to handle DisplayLink
+class ProgressUpdater: ObservableObject {
+    private var displayLink: CADisplayLink?
+    
+    func start(update: @escaping () -> Void) {
+        displayLink?.invalidate()
+        
+        let target = DisplayLinkTarget(updateHandler: update)
+        let displayLink = CADisplayLink(target: target, selector: #selector(DisplayLinkTarget.handleUpdate))
+        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        displayLink.add(to: RunLoop.main, forMode: RunLoop.Mode.common)
+        self.displayLink = displayLink
+    }
+    
+    func stop() {
+        displayLink?.invalidate()
+        displayLink = nil
+    }
+}
+
+// Helper class to handle the @objc requirement
+class DisplayLinkTarget {
+    let updateHandler: () -> Void
+    
+    init(updateHandler: @escaping () -> Void) {
+        self.updateHandler = updateHandler
+    }
+    
+    @objc func handleUpdate() {
+        updateHandler()
     }
 }

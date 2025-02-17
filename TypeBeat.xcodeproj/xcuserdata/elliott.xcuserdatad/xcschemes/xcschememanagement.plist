@@ -23,13 +23,39 @@
 		</dict>
 		<key>TypeBeat.xcscheme_^#shared#^_</key>
 		<dict>
+			<key>isShown</key>
+			<true/>
 			<key>orderHint</key>
 			<integer>1</integer>
+		</dict>
+		<key>TypeBeatTests.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>isShown</key>
+			<false/>
+			<key>orderHint</key>
+			<integer>2</integer>
+		</dict>
+		<key>TypeBeatUITests.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>isShown</key>
+			<false/>
+			<key>orderHint</key>
+			<integer>3</integer>
 		</dict>
 	</dict>
 	<key>SuppressBuildableAutocreation</key>
 	<dict>
 		<key>4F497EFA2CF9648C003DA4FE</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>4F9713DE2D62C23A00996AC9</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>4F9714062D62D4B100996AC9</key>
 		<dict>
 			<key>primary</key>
 			<true/>

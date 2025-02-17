@@ -42,7 +42,7 @@ struct SettingsView: View {
     
     func changeLanguage(to language: String) {
         // Stop all playback first
-        AudioManager.shared.stopAllPlayback()
+        AudioManager.shared.stopAllPlayers()
         
         // Set the new language
         UserDefaults.standard.set(language, forKey: "AppLanguage")

@@ -29,6 +29,30 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
+      <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "4F9713DE2D62C23A00996AC9"
+               BuildableName = "TypeBeatTests.xctest"
+               BlueprintName = "TypeBeatTests"
+               ReferencedContainer = "container:TypeBeat.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "4F97142B2D62D87B00996AC9"
+               BuildableName = "TypeBeatUITests.xctest"
+               BlueprintName = "TypeBeatUITests"
+               ReferencedContainer = "container:TypeBeat.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

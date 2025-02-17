@@ -6,25 +6,27 @@
 //
 
 
-enum MusicKey: String, CaseIterable {
-    case C = "C"
-    case CSharp = "C#"
-    case D = "D"
-    case DSharp = "D#"
-    case E = "E"
-    case F = "F"
-    case FSharp = "F#"
-    case G = "G"
-    case GSharp = "G#"
-    case A = "A"
-    case ASharp = "A#"
-    case B = "B"
+enum MusicKey: String, CaseIterable, Comparable {
+    case C, CSharp, D, DSharp, E, F, FSharp, G, GSharp, A, ASharp, B
     
     var localizedName: String {
-        return "key.\(self.rawValue.lowercased().replacingOccurrences(of: "#", with: "sharp"))".localized
+        switch self {
+        case .CSharp: return "C♯"
+        case .DSharp: return "D♯"
+        case .FSharp: return "F♯"
+        case .GSharp: return "G♯"
+        case .ASharp: return "A♯"
+        default: return rawValue
+        }
     }
     
-    var name: String {
-        return localizedName
+    static func < (lhs: MusicKey, rhs: MusicKey) -> Bool {
+        // Order based on the natural order of musical keys
+        let order = MusicKey.allCases
+        guard let lhsIndex = order.firstIndex(of: lhs),
+              let rhsIndex = order.firstIndex(of: rhs) else {
+            return false
+        }
+        return lhsIndex < rhsIndex
     }
 }
