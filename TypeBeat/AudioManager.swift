@@ -437,6 +437,20 @@ class AudioManager: ObservableObject {
             // Force volume to zero initially
             mixer.outputVolume = 0
             
+            // Pre-configure rate nodes BEFORE connecting them
+            let rate = bpm / sample.bpm
+            if pitchLock {
+                varispeed.rate = 1.0
+                timePitch.rate = Float(rate)
+                timePitch.pitch = 0.0
+                timePitch.overlap = 8.0
+            } else {
+                varispeed.rate = Float(rate)
+                timePitch.rate = 1.0
+                timePitch.pitch = 0.0
+                timePitch.overlap = 3.0
+            }
+            
             // Load and setup buffer
             guard let url = Bundle.main.url(forResource: sample.fileName, withExtension: "mp3"),
                   let file = try? AVAudioFile(forReading: url),
@@ -454,6 +468,7 @@ class AudioManager: ObservableObject {
             engine.attach(varispeed)
             engine.attach(timePitch)
             
+            // Connect everything
             engine.connect(player, to: varispeed, format: buffer.format)
             engine.connect(varispeed, to: timePitch, format: buffer.format)
             engine.connect(timePitch, to: mixer, format: buffer.format)
@@ -468,7 +483,27 @@ class AudioManager: ObservableObject {
             
             // If playing, sync with master clock
             if isPlaying, let masterStartTime = masterStartTime {
-                player.scheduleBuffer(buffer, 
+                // Force a resync of all players to ensure tight phase lock
+                for (existingId, existingPlayer) in players {
+                    guard let existingBuffer = buffers[existingId] else { continue }
+                    existingPlayer.stop()
+                    existingPlayer.scheduleBuffer(existingBuffer,
+                                               at: masterStartTime,
+                                               options: [.loops],
+                                               completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                        guard let self = self, self.isPlaying else { return }
+                        self.checkAndCorrectPhase(for: existingId)
+                    }
+                    existingPlayer.play()
+                    
+                    // Re-apply rate settings to ensure they stick
+                    if let existingSample = samples.first(where: { $0.id == existingId }) {
+                        adjustPlaybackRates(for: existingSample)
+                    }
+                }
+                
+                // Schedule new player
+                player.scheduleBuffer(buffer,
                                     at: masterStartTime,
                                     options: [.loops],
                                     completionCallbackType: .dataPlayedBack) { [weak self] _ in
@@ -478,7 +513,7 @@ class AudioManager: ObservableObject {
                 player.play()
             }
             
-            // Always adjust playback rate, whether playing or not
+            // Double-check rate adjustment
             adjustPlaybackRates(for: sample)
             
             await MainActor.run {
