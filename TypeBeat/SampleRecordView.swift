@@ -17,5 +17,6 @@ struct SampleRecordView: View {
                     onSelect()
                 }
             }
+            .accessibilityIdentifier("sample-\(sample.id)")
     }
 }

@@ -10,6 +10,23 @@
 		4FC39BC42CF96B1100458DB7 /* ColorExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FC39BC32CF96B0B00458DB7 /* ColorExtensions.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		4F9713E32D62C23A00996AC9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4F497EF32CF9648C003DA4FE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4F497EFA2CF9648C003DA4FE;
+			remoteInfo = TypeBeat;
+		};
+		4F9714322D62D87B00996AC9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4F497EF32CF9648C003DA4FE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4F497EFA2CF9648C003DA4FE;
+			remoteInfo = TypeBeat;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXCopyFilesBuildPhase section */
 		4F2A858F2D03F025000EDAC9 /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -27,14 +44,34 @@
 		4F2A85762D03F023000EDAC9 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		4F2A85782D03F023000EDAC9 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		4F497EFB2CF9648C003DA4FE /* TypeBeat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TypeBeat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4F9713DF2D62C23A00996AC9 /* TypeBeatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TypeBeatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4F97142C2D62D87B00996AC9 /* TypeBeatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TypeBeatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FC39BC32CF96B0B00458DB7 /* ColorExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorExtensions.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		4F9713E92D62C25E00996AC9 /* Exceptions for "TypeBeat" folder in "TypeBeatTests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Tests/AudioManagerTests.swift,
+			);
+			target = 4F9713DE2D62C23A00996AC9 /* TypeBeatTests */;
+		};
+		4F97143E2D62D8BC00996AC9 /* Exceptions for "TypeBeat" folder in "TypeBeatUITests" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				TypeBeatUITests/TypeBeatUITests.swift,
+				TypeBeatUITests/TypeBeatUITestsLaunchTests.swift,
+			);
+			target = 4F97142B2D62D87B00996AC9 /* TypeBeatUITests */;
+		};
 		4FC6217A2D0A272200AC7034 /* Exceptions for "TypeBeat" folder in "TypeBeat" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Tests/AudioManagerTests.swift,
+				TypeBeatUITests/TypeBeatUITests.swift,
+				TypeBeatUITests/TypeBeatUITestsLaunchTests.swift,
 			);
 			target = 4F497EFA2CF9648C003DA4FE /* TypeBeat */;
 		};
@@ -45,14 +82,35 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				4FC6217A2D0A272200AC7034 /* Exceptions for "TypeBeat" folder in "TypeBeat" target */,
+				4F9713E92D62C25E00996AC9 /* Exceptions for "TypeBeat" folder in "TypeBeatTests" target */,
+				4F97143E2D62D8BC00996AC9 /* Exceptions for "TypeBeat" folder in "TypeBeatUITests" target */,
 			);
 			path = TypeBeat;
+			sourceTree = "<group>";
+		};
+		4F9713E02D62C23A00996AC9 /* TypeBeatTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TypeBeatTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		4F497EF82CF9648C003DA4FE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4F9713DC2D62C23A00996AC9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4F9714292D62D87B00996AC9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -75,6 +133,7 @@
 			isa = PBXGroup;
 			children = (
 				4F497EFD2CF9648C003DA4FE /* TypeBeat */,
+				4F9713E02D62C23A00996AC9 /* TypeBeatTests */,
 				4F2A85752D03F023000EDAC9 /* Frameworks */,
 				4F497EFC2CF9648C003DA4FE /* Products */,
 				4FC39BC32CF96B0B00458DB7 /* ColorExtensions.swift */,
@@ -85,6 +144,8 @@
 			isa = PBXGroup;
 			children = (
 				4F497EFB2CF9648C003DA4FE /* TypeBeat.app */,
+				4F9713DF2D62C23A00996AC9 /* TypeBeatTests.xctest */,
+				4F97142C2D62D87B00996AC9 /* TypeBeatUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -115,6 +176,49 @@
 			productReference = 4F497EFB2CF9648C003DA4FE /* TypeBeat.app */;
 			productType = "com.apple.product-type.application";
 		};
+		4F9713DE2D62C23A00996AC9 /* TypeBeatTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4F9713E52D62C23A00996AC9 /* Build configuration list for PBXNativeTarget "TypeBeatTests" */;
+			buildPhases = (
+				4F9713DB2D62C23A00996AC9 /* Sources */,
+				4F9713DC2D62C23A00996AC9 /* Frameworks */,
+				4F9713DD2D62C23A00996AC9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4F9713E42D62C23A00996AC9 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				4F9713E02D62C23A00996AC9 /* TypeBeatTests */,
+			);
+			name = TypeBeatTests;
+			packageProductDependencies = (
+			);
+			productName = TypeBeatTests;
+			productReference = 4F9713DF2D62C23A00996AC9 /* TypeBeatTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		4F97142B2D62D87B00996AC9 /* TypeBeatUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4F9714342D62D87B00996AC9 /* Build configuration list for PBXNativeTarget "TypeBeatUITests" */;
+			buildPhases = (
+				4F9714282D62D87B00996AC9 /* Sources */,
+				4F9714292D62D87B00996AC9 /* Frameworks */,
+				4F97142A2D62D87B00996AC9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4F9714332D62D87B00996AC9 /* PBXTargetDependency */,
+			);
+			name = TypeBeatUITests;
+			packageProductDependencies = (
+			);
+			productName = TypeBeatUITests;
+			productReference = 4F97142C2D62D87B00996AC9 /* TypeBeatUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -127,6 +231,14 @@
 				TargetAttributes = {
 					4F497EFA2CF9648C003DA4FE = {
 						CreatedOnToolsVersion = 16.1;
+					};
+					4F9713DE2D62C23A00996AC9 = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = 4F497EFA2CF9648C003DA4FE;
+					};
+					4F97142B2D62D87B00996AC9 = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = 4F497EFA2CF9648C003DA4FE;
 					};
 				};
 			};
@@ -151,12 +263,28 @@
 			projectRoot = "";
 			targets = (
 				4F497EFA2CF9648C003DA4FE /* TypeBeat */,
+				4F9713DE2D62C23A00996AC9 /* TypeBeatTests */,
+				4F97142B2D62D87B00996AC9 /* TypeBeatUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		4F497EF92CF9648C003DA4FE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4F9713DD2D62C23A00996AC9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4F97142A2D62D87B00996AC9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -174,7 +302,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4F9713DB2D62C23A00996AC9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4F9714282D62D87B00996AC9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4F9713E42D62C23A00996AC9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4F497EFA2CF9648C003DA4FE /* TypeBeat */;
+			targetProxy = 4F9713E32D62C23A00996AC9 /* PBXContainerItemProxy */;
+		};
+		4F9714332D62D87B00996AC9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4F497EFA2CF9648C003DA4FE /* TypeBeat */;
+			targetProxy = 4F9714322D62D87B00996AC9 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		4F497F082CF9648D003DA4FE /* Debug */ = {
@@ -379,6 +534,86 @@
 			};
 			name = Release;
 		};
+		4F9713E62D62C23A00996AC9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FAD38UDMHS;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cappinkirk.TypeBeatTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TypeBeat.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TypeBeat";
+			};
+			name = Debug;
+		};
+		4F9713E72D62C23A00996AC9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FAD38UDMHS;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cappinkirk.TypeBeatTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TypeBeat.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/TypeBeat";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		4F9714352D62D87B00996AC9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FAD38UDMHS;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cappinkirk.TypeBeatUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TypeBeat;
+			};
+			name = Debug;
+		};
+		4F9714362D62D87B00996AC9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FAD38UDMHS;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.cappinkirk.TypeBeatUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = TypeBeat;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -396,6 +631,24 @@
 			buildConfigurations = (
 				4F497F0B2CF9648D003DA4FE /* Debug */,
 				4F497F0C2CF9648D003DA4FE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4F9713E52D62C23A00996AC9 /* Build configuration list for PBXNativeTarget "TypeBeatTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4F9713E62D62C23A00996AC9 /* Debug */,
+				4F9713E72D62C23A00996AC9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4F9714342D62D87B00996AC9 /* Build configuration list for PBXNativeTarget "TypeBeatUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4F9714352D62D87B00996AC9 /* Debug */,
+				4F9714362D62D87B00996AC9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

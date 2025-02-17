@@ -56,6 +56,7 @@ struct NowPlayingRow: View {
                 .accentColor(sample.keyColor())
                 .frame(width: 150)
                 .padding(8)
+                .accessibilityIdentifier("Volume Slider")
         }
         .listRowSeparator(.hidden)
         .background(

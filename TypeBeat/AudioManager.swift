@@ -40,7 +40,7 @@ class AudioManager: ObservableObject {
     }
     
     private let engine = AVAudioEngine()
-    private var players: [Int: AVAudioPlayerNode] = [:]
+    internal var players: [Int: AVAudioPlayerNode] = [:]
     private var mixers: [Int: AVAudioMixerNode] = [:]
     private var varispeedNodes: [Int: AVAudioUnitVarispeed] = [:]
     private var timePitchNodes: [Int: AVAudioUnitTimePitch] = [:]
@@ -64,14 +64,16 @@ class AudioManager: ObservableObject {
     // Add these properties
     private let supportedBPMs: Set<Double> = [69.0, 84.0, 102.0]
     private var masterFramePositions: [Double: AVAudioFramePosition] = [:]
-    private var masterStartTime: AVAudioTime?
+    internal var masterStartTime: AVAudioTime?
     private let syncMonitor = DispatchQueue(label: "com.typebeat.sync", qos: .userInteractive)
     private var syncTimer: DispatchSourceTimer?
     
     // Add these properties
     private var masterPhasePosition: Double = 0.0
     private let syncThreshold: Double = 0.0005 // 0.5ms threshold
-    private var masterLoopLength: AVAudioFramePosition = 0
+    internal var masterLoopLength: AVAudioFramePosition {
+        AVAudioFramePosition(masterLoopDuration * sampleRate)
+    }
     
     // Add these properties at the top of AudioManager class
     private var isTransitioning = false
@@ -437,23 +439,23 @@ class AudioManager: ObservableObject {
             // Force volume to zero initially
             mixer.outputVolume = 0
             
-            // Pre-configure rate nodes BEFORE connecting them
-            let rate = bpm / sample.bpm
-            if pitchLock {
-                varispeed.rate = 1.0
-                timePitch.rate = Float(rate)
-                timePitch.pitch = 0.0
-                timePitch.overlap = 8.0
-            } else {
-                varispeed.rate = Float(rate)
-                timePitch.rate = 1.0
-                timePitch.pitch = 0.0
-                timePitch.overlap = 3.0
+            // Load and setup buffer
+            var url: URL?
+            #if DEBUG
+                // When running tests, look in test bundle
+                if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+                    let testBundle = Bundle(for: type(of: self))
+                    url = testBundle.url(forResource: sample.fileName, withExtension: nil)
+                }
+            #endif
+            
+            // Fall back to main bundle if not found in test bundle
+            if url == nil {
+                url = Bundle.main.url(forResource: sample.fileName, withExtension: "mp3")
             }
             
-            // Load and setup buffer
-            guard let url = Bundle.main.url(forResource: sample.fileName, withExtension: "mp3"),
-                  let file = try? AVAudioFile(forReading: url),
+            guard let fileURL = url,
+                  let file = try? AVAudioFile(forReading: fileURL),
                   let buffer = try? AVAudioPCMBuffer(pcmFormat: file.processingFormat, 
                                                     frameCapacity: AVAudioFrameCount(file.length)) else {
                 print("Could not load audio file: \(sample.fileName)")
@@ -941,6 +943,22 @@ class AudioManager: ObservableObject {
         }
     }
 
+    // Add these methods for testing
+    func getPlaybackRate(for sample: Sample) -> Float {
+        Float(bpm / sample.bpm)
+    }
+    
+    func getSamplePhase(for sampleId: Int) -> Double {
+        guard let player = players[sampleId],
+              let playerTime = player.lastRenderTime,
+              playerTime.isSampleTimeValid else { return 0 }
+        
+        return Double(playerTime.sampleTime % masterLoopLength) / Double(masterLoopLength)
+    }
+    
+    func getSampleRate(for sampleId: Int) -> Float {
+        varispeedNodes[sampleId]?.rate ?? 0
+    }
 }
 
 // Helper extension for AVAudioTime calculations

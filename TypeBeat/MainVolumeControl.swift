@@ -49,6 +49,7 @@ struct MainVolumeControl: View {
                 .font(.subheadline)
                 .foregroundColor(.white)
                 .lineLimit(2)
+                .accessibilityIdentifier("Main Volume")
             Spacer()
 
             Slider(value: $mainVolume, in: 0...1)
@@ -58,6 +59,7 @@ struct MainVolumeControl: View {
                     audioManager.setMasterVolume(newValue)
                 }
                 .padding(8)
+                .accessibilityIdentifier("Main Volume Slider")
         }
         .background(
             RoundedRectangle(cornerRadius: 10)

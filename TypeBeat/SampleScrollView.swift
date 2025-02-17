@@ -50,6 +50,7 @@ struct SampleScrollView: View {
                     .opacity(0.95)
                     .edgesIgnoringSafeArea(.horizontal)
             )
+            .accessibilityIdentifier("bpm-header-\(Int(bpm))")
     }
     
     private func keyHeader(for key: MusicKey, samples: [Sample]) -> some View {
