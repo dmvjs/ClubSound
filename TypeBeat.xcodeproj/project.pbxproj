@@ -54,6 +54,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Tests/AudioManagerTests.swift,
+				Tests/AudioTimingTests.swift,
 			);
 			target = 4F9713DE2D62C23A00996AC9 /* TypeBeatTests */;
 		};
@@ -70,6 +71,7 @@
 			membershipExceptions = (
 				Info.plist,
 				Tests/AudioManagerTests.swift,
+				Tests/AudioTimingTests.swift,
 				TypeBeatUITests/TypeBeatUITests.swift,
 				TypeBeatUITests/TypeBeatUITestsLaunchTests.swift,
 			);

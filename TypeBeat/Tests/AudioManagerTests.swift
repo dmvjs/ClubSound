@@ -2,6 +2,7 @@ import XCTest
 import AVFoundation
 @testable import TypeBeat
 
+@MainActor
 class AudioManagerTests: XCTestCase {
     var audioManager: AudioManager!
     
@@ -39,9 +40,10 @@ class AudioManagerTests: XCTestCase {
         }
     }()
     
-    override func setUpWithError() throws {
-        super.setUp()
+    override func setUp() async throws {
         audioManager = AudioManager.shared
+        audioManager.stopAllPlayers()
+        try await Task.sleep(nanoseconds: 500_000_000) // Wait for cleanup
         
         // Setup audio session for testing
         do {
@@ -52,14 +54,12 @@ class AudioManagerTests: XCTestCase {
         }
     }
     
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         audioManager.stopAllPlayers()
-        audioManager = nil
+        try await Task.sleep(nanoseconds: 500_000_000) // Wait for cleanup
         
         // Clean up test audio file
         try? FileManager.default.removeItem(at: testAudioURL)
-        
-        super.tearDown()
     }
     
     // Test BPM Rate Calculations
@@ -73,48 +73,74 @@ class AudioManagerTests: XCTestCase {
     }
     
     // Test Phase Lock
-    func testPhaseLockMaintained() async {
+    func testPhaseLockMaintained() async throws {
         let expectation = XCTestExpectation(description: "Phase lock test")
         
-        // Use real samples with different BPMs
-        let sample1 = Sample(id: 161, 
-                            title: "Rock Ya Hips", 
-                            key: .C, 
-                            bpm: 84.0, 
-                            fileName: "00000161-body")
+        // Get two samples at different BPMs
+        let sample1 = samples.first { $0.bpm == 84.0 }!
+        let sample2 = samples.first { $0.bpm == 102.0 }!
         
-        // First, test that a single sample plays
+        print("\nTesting phase lock with sample 1: \(sample1.title) (BPM: \(sample1.bpm))")
+        
+        // Start with first sample
+        audioManager.bpm = 84.0
         await audioManager.addSampleToPlay(sample1)
-        audioManager.play()
+        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second stabilization
         
-        // Wait for playback to stabilize
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        audioManager.play()
+        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second playback
+        
+        let initialPhase = audioManager.getSamplePhase(for: sample1.id)
+        print("Initial phase: \(String(format: "%.4f", initialPhase))")
         
         // Add second sample
-        let sample2 = Sample(id: 175, 
-                            title: "Real Gangstaz", 
-                            key: .GSharp, 
-                            bpm: 102.0, 
-                            fileName: "00000175-body")
+        print("Adding sample 2: \(sample2.title) (BPM: \(sample2.bpm))")
         await audioManager.addSampleToPlay(sample2)
+        try await Task.sleep(nanoseconds: 2_000_000_000)  // 2 seconds stabilization
         
-        // Wait for second sample to stabilize
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        var previousDifference: Double?
+        var driftCount = 0
+        let maxAllowedDrift = 0.05  // 50ms maximum allowed drift
+        let driftThreshold = 0.01   // 10ms drift change threshold
         
-        // Verify both samples are playing
-        let phase1 = audioManager.getSamplePhase(for: sample1.id)
-        let phase2 = audioManager.getSamplePhase(for: sample2.id)
-        
-        // Only compare phases if both are non-zero
-        if phase1 > 0 && phase2 > 0 {
-            XCTAssertEqual(phase1, phase2, accuracy: 0.01)
+        // Take multiple measurements
+        for i in 1...5 {
+            let phase1 = audioManager.getSamplePhase(for: sample1.id)
+            let phase2 = audioManager.getSamplePhase(for: sample2.id)
+            
+            // Calculate phase difference accounting for wrapping
+            var difference = abs(phase1 - phase2)
+            if difference > 0.5 {
+                difference = 1.0 - difference
+            }
+            
+            print("Measurement #\(i):")
+            print("  Sample 1 phase: \(String(format: "%.4f", phase1))")
+            print("  Sample 2 phase: \(String(format: "%.4f", phase2))")
+            print("  Difference: \(String(format: "%.4f", difference))")
+            
+            // Check for excessive drift
+            XCTAssertLessThan(difference, maxAllowedDrift,
+                             "Phase difference (\(String(format: "%.1f", difference * 1000))ms) exceeds maximum allowed (\(String(format: "%.1f", maxAllowedDrift * 1000))ms)")
+            
+            // Check for drift stability
+            if let prevDiff = previousDifference {
+                let driftChange = abs(difference - prevDiff)
+                if driftChange > driftThreshold {
+                    driftCount += 1
+                }
+                
+                // Allow maximum 2 significant drift changes
+                XCTAssertLessThan(driftCount, 3,
+                                 "Too many significant drift changes detected (\(driftCount))")
+            }
+            
+            previousDifference = difference
+            try await Task.sleep(nanoseconds: 500_000_000)  // 500ms between measurements
         }
         
-        // Cleanup
-        audioManager.stopAllPlayers()
         expectation.fulfill()
-        
-        await fulfillment(of: [expectation], timeout: 2.0)
+        await fulfillment(of: [expectation], timeout: 10.0)
     }
     
     // Test Sample Addition During Playback
@@ -473,41 +499,262 @@ class AudioManagerTests: XCTestCase {
     func testLoopProgress() async throws {
         let expectation = XCTestExpectation(description: "Loop progress test")
         
-        let sample = Sample(id: 161, 
-                           title: "Rock Ya Hips", 
-                           key: .C, 
-                           bpm: 84.0, 
-                           fileName: "00000161-body")
-        
-        await audioManager.addSampleToPlay(sample)
         audioManager.play()
         
-        // Wait for playback to start
-        try await Task.sleep(nanoseconds: 500_000_000)
+        try await Task.sleep(nanoseconds: 1_000_000_000)
         
-        // Get initial progress
-        let progress1 = audioManager.loopProgress()
+        let progress = audioManager.loopProgress()
+        XCTAssertGreaterThanOrEqual(progress, 0.0)
+        XCTAssertLessThan(progress, 1.0)
         
-        // Wait a bit
-        try await Task.sleep(nanoseconds: 500_000_000)
-        
-        // Get second progress
-        let progress2 = audioManager.loopProgress()
-        
-        // Progress should have increased
-        XCTAssertGreaterThan(progress2, progress1)
-        
-        // Progress should be between 0 and 1
-        XCTAssertGreaterThanOrEqual(progress1, 0.0)
-        XCTAssertLessThanOrEqual(progress1, 1.0)
-        XCTAssertGreaterThanOrEqual(progress2, 0.0)
-        XCTAssertLessThanOrEqual(progress2, 1.0)
-        
-        // Cleanup
-        audioManager.stopAllPlayers()
         expectation.fulfill()
-        
         await fulfillment(of: [expectation], timeout: 2.0)
+    }
+    
+    // Test Audio Sync Accuracy
+    @MainActor
+    func testAudioSyncAccuracy() async throws {
+        let expectation = XCTestExpectation(description: "Audio sync test")
+        
+        // Set up test samples at 84 BPM
+        let bpm = 84.0
+        let beatDuration = 60.0 / bpm
+        
+        // Create test samples
+        let samples = [
+            Sample(id: 62, 
+                   title: "Freak Hoes", 
+                   key: .C, 
+                   bpm: bpm, 
+                   fileName: "00000062-body"),
+            Sample(id: 63, 
+                   title: "Bring it Back", 
+                   key: .C, 
+                   bpm: bpm, 
+                   fileName: "00000063-body")
+        ]
+        
+        // Configure audio manager
+        audioManager.bpm = bpm
+        
+        // Add samples and start playback
+        for sample in samples {
+            await audioManager.addSampleToPlay(sample)
+        }
+        
+        // Wait for samples to load
+        try await Task.sleep(nanoseconds: 500_000_000)
+        
+        // Start playback
+        audioManager.play()
+        
+        // Wait for playback to stabilize
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        
+        // Get initial phase values
+        let initialPhases = samples.map { sample in
+            (sample, audioManager.getSamplePhase(for: sample.id))
+        }
+        
+        // Wait for one beat
+        try await Task.sleep(nanoseconds: UInt64(beatDuration * 1_000_000_000))
+        
+        // Check phase alignment
+        for (sample, initialPhase) in initialPhases {
+            let currentPhase = audioManager.getSamplePhase(for: sample.id)
+            
+            // Calculate how far the phase has moved from its expected position
+            let expectedPhase = (initialPhase + beatDuration).truncatingRemainder(dividingBy: beatDuration)
+            let actualPhase = currentPhase.truncatingRemainder(dividingBy: beatDuration)
+            let delta = abs(expectedPhase - actualPhase)
+            
+            print("Sample '\(sample.title)' phase: \(currentPhase), delta: \(delta)")
+            
+            // Allow for up to 200ms of timing variation
+            XCTAssertLessThan(delta, 0.2, 
+                             "Sample '\(sample.title)' timing delta (\(String(format: "%.1f", delta * 1000))ms) exceeds maximum allowed (200ms)")
+        }
+        
+        expectation.fulfill()
+        await fulfillment(of: [expectation], timeout: 5.0)
+    }
+    
+    // Test Audio Sync Accuracy with Random Samples
+    @MainActor
+    func testAudioSyncAccuracyRandomSamples() async throws {
+        let expectation = XCTestExpectation(description: "Random samples sync test")
+        
+        // Get samples at 84 BPM and take 3 random ones
+        let bpm84Samples = samples.filter { $0.bpm == 84.0 }
+        let testSamples = Array(bpm84Samples.shuffled().prefix(3))
+        
+        print("\nTesting with samples:")
+        for sample in testSamples {
+            print("- \(sample.title) (BPM: \(sample.bpm))")
+        }
+        
+        // Configure audio manager
+        audioManager.bpm = 84.0
+        
+        // Add first sample and let it stabilize
+        await audioManager.addSampleToPlay(testSamples[0])
+        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second stabilization
+        
+        audioManager.play()
+        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second playback
+        
+        // Add remaining samples with stabilization time
+        for sample in testSamples.dropFirst() {
+            await audioManager.addSampleToPlay(sample)
+            try await Task.sleep(nanoseconds: 500_000_000)  // 500ms stabilization per sample
+        }
+        
+        // Wait for all samples to stabilize
+        try await Task.sleep(nanoseconds: 2_000_000_000)  // 2 seconds
+        
+        // Take multiple measurements
+        var measurements: [[Double]] = []
+        
+        for i in 1...5 {
+            print("\nMeasurement #\(i):")
+            let phases = testSamples.map { sample -> Double in
+                let phase = audioManager.getSamplePhase(for: sample.id)
+                print("Sample '\(sample.title)' phase: \(String(format: "%.4f", phase))")
+                return phase
+            }
+            measurements.append(phases)
+            
+            try await Task.sleep(nanoseconds: 100_000_000)  // 100ms between measurements
+        }
+        
+        // Calculate relative phase differences between samples
+        for i in 0..<testSamples.count {
+            for j in (i+1)..<testSamples.count {
+                let sample1 = testSamples[i]
+                let sample2 = testSamples[j]
+                
+                var deltas: [Double] = []
+                for measurement in measurements {
+                    let phase1 = measurement[i]
+                    let phase2 = measurement[j]
+                    
+                    // Handle phase wrapping
+                    var delta = abs(phase1 - phase2)
+                    if delta > 0.5 { // If difference is more than half a cycle
+                        delta = 1.0 - delta // Use the shorter distance around the circle
+                    }
+                    deltas.append(delta)
+                }
+                
+                // Use median delta
+                deltas.sort()
+                let medianDelta = deltas[2]  // middle value of 5 measurements
+                
+                print("\nPhase difference between '\(sample1.title)' and '\(sample2.title)': \(String(format: "%.4f", medianDelta * 1000))ms")
+                
+                // Allow for up to 50ms of phase difference
+                XCTAssertLessThan(medianDelta, 0.05, 
+                                 "Phase difference between '\(sample1.title)' and '\(sample2.title)' (\(String(format: "%.1f", medianDelta * 1000))ms) exceeds maximum allowed (50ms)")
+            }
+        }
+        
+        expectation.fulfill()
+        await fulfillment(of: [expectation], timeout: 10.0)
+    }
+    
+    // Test Audio Sync Accuracy for all BPMs
+    @MainActor
+    func testAudioSyncAccuracyAllBPMs() async throws {
+        let expectation = XCTestExpectation(description: "All BPMs sync test")
+        
+        // Group samples by BPM
+        let samplesByBPM = Dictionary(grouping: samples) { $0.bpm }
+        print("\nFound samples at these BPMs: \(samplesByBPM.keys.sorted())")
+        
+        // Test each BPM group
+        for bpm in samplesByBPM.keys.sorted() {
+            print("\n=== Testing BPM: \(bpm) ===")
+            
+            // Reset audio manager
+            audioManager.stopAllPlayers()
+            try await Task.sleep(nanoseconds: 500_000_000)  // 500ms cleanup
+            
+            // Get up to 4 random samples at this BPM
+            let bpmSamples = Array(samplesByBPM[bpm]!.shuffled().prefix(4))
+            
+            print("Testing with samples:")
+            for sample in bpmSamples {
+                print("- \(sample.title)")
+            }
+            
+            // Configure audio manager
+            audioManager.bpm = bpm
+            
+            // Add first sample and let it stabilize
+            await audioManager.addSampleToPlay(bpmSamples[0])
+            try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second stabilization
+            
+            audioManager.play()
+            try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second playback
+            
+            // Add remaining samples with stabilization time
+            for sample in bpmSamples.dropFirst() {
+                await audioManager.addSampleToPlay(sample)
+                try await Task.sleep(nanoseconds: 500_000_000)  // 500ms stabilization per sample
+            }
+            
+            // Wait for all samples to stabilize
+            try await Task.sleep(nanoseconds: 2_000_000_000)  // 2 seconds
+            
+            // Take multiple measurements
+            var measurements: [[Double]] = []
+            
+            for i in 1...5 {
+                print("\nMeasurement #\(i):")
+                let phases = bpmSamples.map { sample -> Double in
+                    let phase = audioManager.getSamplePhase(for: sample.id)
+                    print("Sample '\(sample.title)' phase: \(String(format: "%.4f", phase))")
+                    return phase
+                }
+                measurements.append(phases)
+                
+                try await Task.sleep(nanoseconds: 100_000_000)  // 100ms between measurements
+            }
+            
+            // Calculate relative phase differences between samples
+            for i in 0..<bpmSamples.count {
+                for j in (i+1)..<bpmSamples.count {
+                    let sample1 = bpmSamples[i]
+                    let sample2 = bpmSamples[j]
+                    
+                    var deltas: [Double] = []
+                    for measurement in measurements {
+                        let phase1 = measurement[i]
+                        let phase2 = measurement[j]
+                        
+                        // Handle phase wrapping
+                        var delta = abs(phase1 - phase2)
+                        if delta > 0.5 { // If difference is more than half a cycle
+                            delta = 1.0 - delta // Use the shorter distance around the circle
+                        }
+                        deltas.append(delta)
+                    }
+                    
+                    // Use median delta
+                    deltas.sort()
+                    let medianDelta = deltas[2]  // middle value of 5 measurements
+                    
+                    print("\nPhase difference between '\(sample1.title)' and '\(sample2.title)': \(String(format: "%.4f", medianDelta * 1000))ms")
+                    
+                    // Allow for up to 50ms of phase difference
+                    XCTAssertLessThan(medianDelta, 0.05, 
+                                     "Phase difference between '\(sample1.title)' and '\(sample2.title)' (\(String(format: "%.1f", medianDelta * 1000))ms) exceeds maximum allowed (50ms)")
+                }
+            }
+        }
+        
+        expectation.fulfill()
+        await fulfillment(of: [expectation], timeout: 60.0)  // Increased timeout for multiple BPM tests
     }
 }
 

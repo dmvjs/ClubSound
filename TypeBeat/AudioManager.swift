@@ -951,9 +951,18 @@ class AudioManager: ObservableObject {
     func getSamplePhase(for sampleId: Int) -> Double {
         guard let player = players[sampleId],
               let playerTime = player.lastRenderTime,
+              let startTime = masterStartTime,
               playerTime.isSampleTimeValid else { return 0 }
         
-        return Double(playerTime.sampleTime % masterLoopLength) / Double(masterLoopLength)
+        // Calculate elapsed time in seconds
+        let elapsedTime = playerTime.timeIntervalSince(startTime)
+        
+        // Calculate phase based on BPM
+        let beatsPerSecond = bpm / 60.0
+        let totalPhase = elapsedTime * beatsPerSecond
+        
+        // Return normalized phase (0.0 to 1.0)
+        return totalPhase.truncatingRemainder(dividingBy: 1.0)
     }
     
     func getSampleRate(for sampleId: Int) -> Float {

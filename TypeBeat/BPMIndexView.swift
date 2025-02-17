@@ -28,6 +28,7 @@ struct BPMIndexView: View {
                             onSelection(bpm)
                         }
                     }
+                    .accessibilityIdentifier("bpm-index-header-\(Int(bpm))")
             }
         }
         .frame(width: tapTargetWidth)

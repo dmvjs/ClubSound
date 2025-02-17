@@ -15,7 +15,7 @@ struct KeyIndexView: View {
     
     var body: some View {
         VStack(spacing: 2) {
-            ForEach(MusicKey.allCases, id: \.self) { key in
+            ForEach(uniqueKeys, id: \.self) { key in
                 Text(key.localizedName)
                     .font(.system(size: 11, weight: .semibold))
                     .minimumScaleFactor(0.5)
@@ -29,9 +29,17 @@ struct KeyIndexView: View {
                             onSelection(key)
                         }
                     }
+                    .accessibilityIdentifier("key-header-\(key.rawValue)")
             }
         }
         .frame(width: tapTargetWidth)
+    }
+    
+    private var uniqueKeys: [MusicKey] {
+        let keys = groupedSamples.flatMap { _, keyGroups in
+            keyGroups.map { $0.0 }
+        }
+        return Array(Set(keys)).sorted()
     }
 }
 

@@ -24,6 +24,13 @@ struct NowPlayingRow: View {
                     .trim(from: 0, to: CGFloat(progress))
                     .stroke(sample.keyColor(), lineWidth: 3)
                     .rotationEffect(.degrees(-90))
+                    .accessibilityValue(String(format: "%.2f", progress))
+                    .accessibilityIdentifier("progress-ring-\(sample.id)")
+                    .overlay(
+                        Text(String(format: "%.4f", progress))
+                            .opacity(0)
+                            .accessibilityIdentifier("phase-\(sample.id)")
+                    )
                 
                 Circle()
                     .fill(Color(.secondarySystemBackground))
@@ -71,6 +78,7 @@ struct NowPlayingRow: View {
             } label: {
                 Label("action.remove".localized, systemImage: "trash")
             }
+            .accessibilityIdentifier("delete-button")
         }
     }
 }

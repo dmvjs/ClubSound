@@ -38,11 +38,13 @@ struct NowPlayingList: View {
                 )
                 .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                 .listRowSeparator(.hidden)
+                .accessibilityIdentifier("now-playing-row-\(sample.id)")
             }
         }
         .listStyle(PlainListStyle())
         .frame(height: CGFloat(nowPlaying.count) * 60 + 10)
         .frame(maxWidth: .infinity)
         .animation(.easeInOut, value: nowPlaying.count)
+        .accessibilityIdentifier("now-playing-list")
     }
 }

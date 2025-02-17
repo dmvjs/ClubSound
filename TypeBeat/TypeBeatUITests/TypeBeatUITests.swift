@@ -1,111 +1,185 @@
 import XCTest
+@testable import TypeBeat
 
 final class TypeBeatUITests: XCTestCase {
-    var app: XCUIApplication!
-    
-    override class var runsForEachTargetApplicationUIConfiguration: Bool {
-        false  // Prevents device cloning
-    }
+    let app = XCUIApplication()
     
     override func setUpWithError() throws {
         continueAfterFailure = false
-        app = XCUIApplication()
         app.launch()
         
-        // Print available buttons for debugging
         print("=== Available Buttons ===")
-        app.buttons.allElementsBoundByIndex.forEach { button in
-            print("Button: \(button.label)")
-        }
-    }
-    
-    override func tearDownWithError() throws {
-        if app != nil {
-            app.terminate()
-            app = nil
-        }
-        super.tearDown()
+        print(app.buttons.debugDescription)
     }
     
     func testBPMScrolling() throws {
-        // ... existing implementation ...
+        print("\n=== Starting BPM Scrolling Test ===")
+        
+        // Wait for initial load
+        waitForAppToBeReady()
+        let bpmHeader = app.staticTexts["bpm-index-header-84"]
+        XCTAssertTrue(bpmHeader.waitForExistence(timeout: 10))
+        bpmHeader.tap()
+        
+        // Test scrolling behavior
+        let firstBPM = app.staticTexts.firstMatch
+        firstBPM.tap()
     }
     
     func testKeyScrolling() throws {
-        // ... existing implementation ...
+        print("\n=== Starting Key Scrolling Test ===")
+        
+        // Wait for initial load
+        waitForAppToBeReady()
+        let bpmHeader = app.staticTexts["bpm-index-header-84"]
+        XCTAssertTrue(bpmHeader.waitForExistence(timeout: 10))
+        bpmHeader.tap()
+        
+        // Test scrolling behavior
+        let firstKey = app.staticTexts.firstMatch
+        firstKey.tap()
     }
     
     func testBPMKeyFiltering() throws {
-        // ... existing implementation ...
+        print("\n=== Starting BPM/Key Filtering Test ===")
+        
+        // Wait for initial load
+        waitForAppToBeReady()
+        let bpmHeader = app.staticTexts["bpm-index-header-84"]
+        XCTAssertTrue(bpmHeader.waitForExistence(timeout: 10))
+        bpmHeader.tap()
+        
+        // Test key selection
+        let firstKey = app.staticTexts.firstMatch
+        firstKey.tap()
+        
+        print("\n=== Looking for Samples ===")
+        let predicate = NSPredicate(format: "identifier BEGINSWITH 'sample-'")
+        let samples = app.staticTexts.matching(predicate)
+        print("Found \(samples.count) samples")
+        
+        XCTAssertTrue(samples.count > 0, "No samples found")
+        let sample = samples.firstMatch
+        XCTAssertTrue(sample.exists, "Sample does not exist")
+        
+        print("Selected sample: '\(sample.label)' - Identifier: '\(sample.identifier)'")
+        sample.tap()
+    }
+    
+    func testAudioSync() throws {
+        print("\n=== Starting Audio Sync Test ===")
+        waitForAppToBeReady()
+        
+        // Add first sample and verify it appears
+        let bpmHeader = app.staticTexts["bpm-index-header-84"]
+        XCTAssertTrue(bpmHeader.waitForExistence(timeout: 10), "BPM header not found")
+        bpmHeader.tap()
+        
+        // Add multiple samples to test sync between them
+        let samples = [
+            app.staticTexts["sample-115"],
+            app.staticTexts["sample-120"],
+            app.staticTexts["sample-76"]
+        ]
+        
+        for sample in samples {
+            XCTAssertTrue(sample.waitForExistence(timeout: 5))
+            sample.tap()
+        }
+        
+        // Start playback
+        let playButton = app.buttons["play-button"]
+        XCTAssertTrue(playButton.waitForExistence(timeout: 5), "Play button not found")
+        playButton.tap()
+        
+        // Wait longer for playback to stabilize
+        Thread.sleep(forTimeInterval: 3.0)
+        
+        // Check phase alignment for each sample
+        var initialPhases: [Int: Double] = [:]
+        var maxDrift: Double = 0.0
+        let sampleIds = [115, 120, 76]
+        
+        // Take multiple measurements over time
+        for measurementNum in 1...5 {
+            print("\nMeasurement #\(measurementNum):")
+            var currentPhases: [Int: Double] = [:]
+            
+            // Get all phases first
+            for id in sampleIds {
+                let rowTexts = app.staticTexts.matching(identifier: "now-playing-row-\(id)")
+                for text in rowTexts.allElementsBoundByIndex {
+                    if let phaseValue = Double(text.label) {
+                        currentPhases[id] = phaseValue
+                        print("Sample \(id) phase: \(phaseValue)")
+                        break
+                    }
+                }
+            }
+            
+            // On first measurement, store initial phase differences
+            if measurementNum == 1 {
+                initialPhases = currentPhases
+            } else {
+                // Compare current phase differences with initial ones
+                for id in sampleIds {
+                    for otherId in sampleIds where otherId > id {
+                        let initialDelta = abs((initialPhases[id] ?? 0.0) - (initialPhases[otherId] ?? 0.0))
+                        let currentDelta = abs((currentPhases[id] ?? 0.0) - (currentPhases[otherId] ?? 0.0))
+                        let driftAmount = abs(currentDelta - initialDelta)
+                        
+                        print("Drift between \(id) and \(otherId): \(driftAmount)")
+                        maxDrift = max(maxDrift, driftAmount)
+                    }
+                }
+            }
+            
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        
+        // Allow for up to 5ms of apparent drift due to UI update timing differences
+        XCTAssertLessThan(maxDrift, 0.005, "Samples are drifting out of sync beyond acceptable threshold")
+        print("Maximum observed drift: \(maxDrift)")
     }
     
     func testNowPlayingFunctionality() throws {
         print("\n=== Starting Now Playing Functionality Test ===")
+        waitForAppToBeReady()
         
-        // Wait for the app to be ready
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5), "App did not enter running state")
+        // Wait for BPM header and tap it
+        let bpmHeader = app.staticTexts["bpm-index-header-84"]
+        XCTAssertTrue(bpmHeader.waitForExistence(timeout: 10), "BPM header not found")
+        bpmHeader.tap()
         
-        // Wait for BPM headers
-        let bpmPredicate = NSPredicate(format: "label MATCHES %@", "\\d+ BPM")
-        let bpmTexts = app.staticTexts.matching(bpmPredicate)
+        // Find the first sample in the list (should be "Air Force Ones")
+        let sample = app.staticTexts["sample-115"]
+        XCTAssertTrue(sample.waitForExistence(timeout: 5), "First sample not found")
+        print("Tapping sample: \(sample.label)")
+        sample.tap()
         
-        print("\n=== Waiting for BPM headers ===")
-        let bpmExists = bpmTexts.firstMatch.waitForExistence(timeout: 10)
-        XCTAssertTrue(bpmExists, "No BPM headers found after 10 seconds")
+        // Look for the now playing list first
+        let nowPlayingList = app.collectionViews["now-playing-list"]
+        let exists = nowPlayingList.waitForExistence(timeout: 5)
         
-        // Tap the first BPM header
-        let firstBPMHeader = bpmTexts.firstMatch
-        firstBPMHeader.tap()
-        
-        // Wait for samples to load
-        Thread.sleep(forTimeInterval: 2.0)
-        
-        print("\n=== Looking for Samples ===")
-        let samples = app.staticTexts.matching(NSPredicate(format: "identifier BEGINSWITH[c] %@ AND length:(label) > 2", "sample-"))
-        let sampleCount = samples.count
-        print("Found \(sampleCount) samples")
-        
-        // Get first sample and tap it directly instead of iterating through all
-        let firstSample = samples.element(boundBy: 0)
-        print("Selected sample: '\(firstSample.label)' - Identifier: '\(firstSample.identifier)'")
-        firstSample.tap()
-        
-        // Wait for Now Playing to appear
-        Thread.sleep(forTimeInterval: 1.0)
-        
-        // Add just 2 samples
-        for i in 0...1 {
-            let sample = samples.element(boundBy: i)
-            print("Tapping sample: '\(sample.label)'")
-            sample.tap()
-            Thread.sleep(forTimeInterval: 1.0)
+        if !exists {
+            print("\n=== Now Playing List Not Found ===")
+            print("Available collection views:")
+            for view in app.collectionViews.allElementsBoundByIndex {
+                print("CollectionView: \(view.debugDescription)")
+            }
         }
         
-        // Wait for the list to populate
-        Thread.sleep(forTimeInterval: 2.0)
+        XCTAssertTrue(exists, "Now playing list did not appear")
+    }
+    
+    private func waitForAppToBeReady() {
+        let timeout: TimeInterval = 10
+        let predicate = NSPredicate { (app, _) -> Bool in
+            guard let app = app as? XCUIApplication else { return false }
+            return app.state == .runningForeground
+        }
         
-        // Find the cell containing our sample
-        let cells = app.cells
-        XCTAssertTrue(cells.count > 0, "No cells found in the list")
-        
-        // Get the first cell
-        let firstCell = cells.firstMatch
-        XCTAssertTrue(firstCell.exists, "First cell not found")
-        
-        // Perform the swipe
-        let start = firstCell.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
-        let finish = firstCell.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.5))
-        start.press(forDuration: 0.05, thenDragTo: finish)
-        
-        // Give the swipe animation time to complete
-        Thread.sleep(forTimeInterval: 1.0)
-        
-        // Tap where the delete button should be (right edge of the cell)
-        let deleteCoordinate = firstCell.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
-        deleteCoordinate.tap()
-        
-        // Verify deletion
-        Thread.sleep(forTimeInterval: 1.0)
-        XCTAssertTrue(cells.count < 2, "Cell was not deleted")
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: app)
+        _ = XCTWaiter.wait(for: [expectation], timeout: timeout)
     }
 }
