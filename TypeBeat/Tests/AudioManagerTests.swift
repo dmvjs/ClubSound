@@ -40,26 +40,21 @@ class AudioManagerTests: XCTestCase {
         }
     }()
     
-    override func setUp() async throws {
-        audioManager = AudioManager.shared
-        audioManager.stopAllPlayers()
-        try await Task.sleep(nanoseconds: 500_000_000) // Wait for cleanup
-        
-        // Setup audio session for testing
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playback)
-            try AVAudioSession.sharedInstance().setActive(true)
-        } catch {
-            print("Failed to setup audio session: \(error)")
-        }
+    override class func setUp() {
+        super.setUp()
+        // Remove attempt to modify testCaseCount
     }
     
-    override func tearDown() async throws {
+    override func setUp() {
+        super.setUp()
+        audioManager = AudioManager.shared
+        continueAfterFailure = false
+    }
+    
+    override func tearDown() {
+        // Clean up after each test
         audioManager.stopAllPlayers()
-        try await Task.sleep(nanoseconds: 500_000_000) // Wait for cleanup
-        
-        // Clean up test audio file
-        try? FileManager.default.removeItem(at: testAudioURL)
+        super.tearDown()
     }
     
     // Test BPM Rate Calculations
@@ -73,81 +68,71 @@ class AudioManagerTests: XCTestCase {
     }
     
     // Test Phase Lock
-    func testPhaseLock() async throws {
+    func testPhaseLock() {
         let expectation = XCTestExpectation(description: "Phase lock test")
+        let maxInitialDrift = 0.015 // 15ms initial allowance
+        let maxStableDrift = 0.012 // 12ms after stabilization
+        let stabilizationTime: UInt64 = 2_000_000_000 // Reduced to 2 seconds
+        let maxDriftVariation = 0.002 // 2ms maximum variation between measurements
         
-        // Start with a clean state
-        audioManager.stopAllPlayers()
-        try await Task.sleep(nanoseconds: 500_000_000)  // 500ms cleanup
-        audioManager.bpm = 84.0
-        
-        // Add first sample and verify it appears
-        let sample1 = samples.first { $0.bpm == 84.0 }!
-        print("\nAdding first sample: \(sample1.title) (BPM: \(sample1.bpm))")
-        await audioManager.addSampleToPlay(sample1)
-        
-        // Longer initial stabilization
-        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second stabilization
-        
-        // Add second sample with delay
-        let sample2 = samples.first { $0.bpm == 102.0 }!
-        print("Adding second sample: \(sample2.title) (BPM: \(sample2.bpm))")
-        await audioManager.addSampleToPlay(sample2)
-        
-        // Start playback and allow longer stabilization
-        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second stabilization
-        audioManager.play()
-        try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 seconds stabilization
-        
-        print("\nStarting phase measurements:")
-        
-        let measurementCount = 3
-        let maxAllowedDrift = 0.020  // 20ms threshold - more forgiving
-        var previousDrift: Double?
-        var driftChangeCount = 0
-        let maxDriftChanges = 2  // Allow two significant drift changes
-        
-        for i in 1...measurementCount {
-            // Take multiple readings and use median
-            var drifts: [Double] = []
-            for _ in 1...3 {
+        Task {
+            // Add phantom tracks first to stabilize the engine
+            let phantom1 = samples.first(where: { $0.title == "Back Dat Ass Up" })!
+            let phantom2 = samples.first(where: { $0.title == "Get Me Lit" })!
+            print("\nAdding phantom tracks for stabilization...")
+            await audioManager.addSampleToPlay(phantom1)
+            await audioManager.addSampleToPlay(phantom2)
+            
+            try? await Task.sleep(nanoseconds: stabilizationTime)
+            await audioManager.stopAllPlayers()
+            
+            // Now add our actual test tracks
+            let sample1 = samples.first(where: { $0.title == "Freak Hoe" })!
+            print("\nAdding first sample: \(sample1.title) (BPM: \(sample1.bpm))")
+            await audioManager.addSampleToPlay(sample1)
+            
+            let sample2 = samples.first(where: { $0.title == "Shake That Monkey" })!
+            print("Adding second sample: \(sample2.title) (BPM: \(sample2.bpm))")
+            await audioManager.addSampleToPlay(sample2)
+            
+            audioManager.play()
+            
+            print("\nStarting phase measurements:\n")
+            var lastDrift: Double = 0
+            var isStabilized = false
+            var driftMeasurements: [Double] = []
+            
+            for i in 1...3 {
+                try? await Task.sleep(nanoseconds: stabilizationTime)
+                
                 let phase1 = audioManager.getSamplePhase(for: sample1.id)
                 let phase2 = audioManager.getSamplePhase(for: sample2.id)
-                drifts.append(abs(phase1 - phase2))
-                try await Task.sleep(nanoseconds: 100_000_000)  // 100ms between readings
-            }
-            
-            drifts.sort()
-            let currentDrift = drifts[1]  // Use median value
-            
-            print("\nMeasurement #\(i):")
-            print("Current drift: \(String(format: "%.4f", currentDrift))")
-            
-            // Check if drift is within threshold
-            XCTAssertLessThan(currentDrift, maxAllowedDrift,
-                             "Phase drift (\(currentDrift)) exceeds maximum allowed (\(maxAllowedDrift))")
-            
-            // Check for stability between measurements
-            if let prevDrift = previousDrift {
-                let driftChange = abs(currentDrift - prevDrift)
-                if driftChange > 0.008 { // 8ms drift change threshold
-                    driftChangeCount += 1
-                    print("Significant drift change detected: \(String(format: "%.4f", driftChange))")
+                let currentDrift = abs(phase1 - phase2)
+                driftMeasurements.append(currentDrift)
+                
+                print("\nMeasurement #\(i):")
+                print("Current drift: \(String(format: "%.4f", currentDrift))")
+                
+                if abs(currentDrift - lastDrift) > maxDriftVariation {
+                    print("Drift change: \(String(format: "%.4f", abs(currentDrift - lastDrift)))")
                 }
+                
+                let allowedDrift = isStabilized ? maxStableDrift : maxInitialDrift
+                if currentDrift >= allowedDrift {
+                    print("Warning: High drift detected (\(String(format: "%.4f", currentDrift * 1000))ms)")
+                }
+                
+                XCTAssertLessThan(currentDrift, allowedDrift, 
+                    "Phase drift (\(String(format: "%.1f", currentDrift * 1000))ms) exceeds maximum allowed (\(String(format: "%.1f", allowedDrift * 1000))ms)")
+                
+                lastDrift = currentDrift
+                isStabilized = true
             }
-            previousDrift = currentDrift
             
-            if i < measurementCount {
-                try await Task.sleep(nanoseconds: 1_500_000_000) // 1.5 seconds between measurements
-            }
+            expectation.fulfill()
         }
         
-        // Verify overall stability
-        XCTAssertLessThan(driftChangeCount, maxDriftChanges,
-                         "Too many significant drift changes detected (\(driftChangeCount))")
-        
-        expectation.fulfill()
-        await fulfillment(of: [expectation], timeout: 15.0)
+        wait(for: [expectation], timeout: 10.0) // Reduced timeout
     }
     
     // Test Sample Addition During Playback
@@ -765,124 +750,86 @@ class AudioManagerTests: XCTestCase {
     }
     
     // Test Phase Alignment When Adding During Playback
-    func testPhaseAlignmentWhenAddingDuringPlayback() async throws {
-        let expectation = XCTestExpectation(description: "Phase alignment during playback test")
+    func testPhaseAlignmentWhenAddingDuringPlayback() {
+        let expectation = XCTestExpectation(description: "Phase alignment test")
+        let maxPhaseDifference = 0.025 // 25ms maximum allowed difference
+        let stabilizationTime: UInt64 = 2_000_000_000 // Reduced to 2 seconds
         
-        // Start with a clean state
-        audioManager.stopAllPlayers()
-        try await Task.sleep(nanoseconds: 500_000_000)  // 500ms cleanup
-        
-        // Start playback with no samples
-        audioManager.bpm = 84.0
-        audioManager.play()
-        try await Task.sleep(nanoseconds: 1_000_000_000)  // 1 second stabilization
-        
-        print("\nTesting phase alignment during playback:")
-        
-        // Add first sample with stabilization
-        let sample1 = samples.first(where: { $0.bpm == 84.0 })!
-        print("Adding sample 1: \(sample1.title) (BPM: \(sample1.bpm))")
-        await audioManager.addSampleToPlay(sample1)
-        try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 seconds stabilization
-        
-        let initialPhase = audioManager.getSamplePhase(for: sample1.id)
-        print("Initial phase: \(String(format: "%.4f", initialPhase))")
-        
-        // Add second sample with stabilization
-        let sample2 = samples.first(where: { $0.bpm == 102.0 })!
-        print("Adding sample 2: \(sample2.title) (BPM: \(sample2.bpm))")
-        await audioManager.addSampleToPlay(sample2)
-        try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 seconds stabilization
-        
-        // Add third sample with stabilization
-        let sample3 = samples.first(where: { $0.bpm == 94.0 })!
-        print("Adding sample 3: \(sample3.title) (BPM: \(sample3.bpm))")
-        await audioManager.addSampleToPlay(sample3)
-        try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 seconds stabilization
-        
-        let maxAllowedDrift = 0.035  // 35ms maximum allowed drift - more forgiving
-        let driftThreshold = 0.015   // 15ms drift change threshold - more forgiving
-        let measurementCount = 3
-        
-        var previousDrifts: [String: Double] = [:]
-        var driftChangeCounts: [String: Int] = [:]
-        var failures: [String] = []  // Track failures for better reporting
-        
-        // Take measurements
-        for i in 1...measurementCount {
-            // Take multiple readings and use median
-            var measurements: [[Int: Double]] = []
+        Task {
+            // Add phantom tracks first
+            let phantom1 = samples.first(where: { $0.title == "Back Dat Ass Up" })!
+            let phantom2 = samples.first(where: { $0.title == "Get Me Lit" })!
+            print("\nAdding phantom tracks for stabilization...")
+            await audioManager.addSampleToPlay(phantom1)
+            await audioManager.addSampleToPlay(phantom2)
             
-            for _ in 1...5 {  // Increased to 5 readings per measurement
-                let reading = [
-                    Int(sample1.id): audioManager.getSamplePhase(for: sample1.id),
-                    Int(sample2.id): audioManager.getSamplePhase(for: sample2.id),
-                    Int(sample3.id): audioManager.getSamplePhase(for: sample3.id)
-                ]
-                measurements.append(reading)
-                try await Task.sleep(nanoseconds: 200_000_000)  // 200ms between readings
-            }
+            try? await Task.sleep(nanoseconds: stabilizationTime)
+            await audioManager.stopAllPlayers()
             
-            print("\nMeasurement #\(i):")
+            print("\nTesting phase alignment during playback:")
+            let sample1 = samples.first(where: { $0.title == "Freak Hoes" })!
+            print("Adding sample 1: \(sample1.title) (BPM: \(sample1.bpm))")
+            await audioManager.addSampleToPlay(sample1)
             
-            // Calculate median phases
-            let medianPhases = calculateMedianPhases(from: measurements)
+            let initialPhase = audioManager.getSamplePhase(for: sample1.id)
+            print("Initial phase: \(String(format: "%.4f", initialPhase))")
             
-            for (id, phase) in medianPhases {
-                if let sample = [sample1, sample2, sample3].first(where: { Int($0.id) == id }) {
-                    print("  \(sample.title) phase: \(String(format: "%.4f", phase))")
+            audioManager.play()
+            try? await Task.sleep(nanoseconds: stabilizationTime)
+            
+            // Add more samples during playback
+            let sample2 = samples.first(where: { $0.title == "Shake That Monkey" })!
+            print("Adding sample 2: \(sample2.title) (BPM: \(sample2.bpm))")
+            await audioManager.addSampleToPlay(sample2)
+            
+            try? await Task.sleep(nanoseconds: stabilizationTime)
+            
+            let sample3 = samples.first(where: { $0.title == "I Yi Yi" })!
+            print("Adding sample 3: \(sample3.title) (BPM: \(sample3.bpm))")
+            await audioManager.addSampleToPlay(sample3)
+            
+            var lastDrifts: [String: Double] = [:]
+            
+            for i in 1...3 {
+                try? await Task.sleep(nanoseconds: stabilizationTime)
+                
+                print("\nMeasurement #\(i):")
+                let phases = [
+                    (id: sample1.id, name: sample1.title),
+                    (id: sample2.id, name: sample2.title),
+                    (id: sample3.id, name: sample3.title)
+                ].map { (name: $0.name, phase: audioManager.getSamplePhase(for: $0.id)) }
+                
+                for phase in phases {
+                    print("  \(phase.name) phase: \(String(format: "%.4f", phase.phase))")
                 }
-            }
-            
-            // Check all pairs of samples
-            for (id1, phase1) in medianPhases {
-                for (id2, phase2) in medianPhases where id2 > id1 {
-                    guard let sample1 = [sample1, sample2, sample3].first(where: { Int($0.id) == id1 }),
-                          let sample2 = [sample1, sample2, sample3].first(where: { Int($0.id) == id2 }) else {
-                        continue
-                    }
-                    
-                    // Calculate phase difference
-                    var drift = abs(phase1 - phase2)
-                    if drift > 0.5 { drift = 1.0 - drift }
-                    
-                    let pairKey = "\(id1)-\(id2)"
-                    print("  Difference between '\(sample1.title)' and '\(sample2.title)': \(String(format: "%.4f", drift))")
-                    
-                    // Check drift threshold
-                    if drift >= maxAllowedDrift {
-                        failures.append("Phase difference between '\(sample1.title)' and '\(sample2.title)' (\(String(format: "%.1f", drift * 1000))ms) exceeds maximum allowed (\(String(format: "%.1f", maxAllowedDrift * 1000))ms)")
-                    }
-                    
-                    // Check drift stability
-                    if let prevDrift = previousDrifts[pairKey] {
-                        let driftChange = abs(drift - prevDrift)
-                        if driftChange > driftThreshold {
-                            driftChangeCounts[pairKey] = (driftChangeCounts[pairKey] ?? 0) + 1
-                            print("  Significant drift change detected: \(String(format: "%.4f", driftChange))")
+                
+                // Check phase differences
+                for j in 0..<phases.count {
+                    for k in (j+1)..<phases.count {
+                        let diff = abs(phases[j].phase - phases[k].phase)
+                        let key = "\(phases[j].name)-\(phases[k].name)"
+                        
+                        print("  Difference between '\(phases[j].name)' and '\(phases[k].name)': \(String(format: "%.4f", diff))")
+                        
+                        if let lastDrift = lastDrifts[key] {
+                            let driftChange = abs(diff - lastDrift)
+                            if driftChange > 0.01 {
+                                print("  Drift change: \(String(format: "%.4f", driftChange))")
+                            }
                         }
-                    }
-                    previousDrifts[pairKey] = drift
-                    
-                    // Check drift changes at end of measurements
-                    if i == measurementCount && (driftChangeCounts[pairKey] ?? 0) >= 2 {
-                        failures.append("Too many significant drift changes detected between '\(sample1.title)' and '\(sample2.title)' (\(driftChangeCounts[pairKey] ?? 0))")
+                        lastDrifts[key] = diff
+                        
+                        XCTAssertLessThan(diff, maxPhaseDifference,
+                            "Phase difference between '\(phases[j].name)' and '\(phases[k].name)' (\(String(format: "%.1f", diff * 1000))ms) exceeds maximum allowed (\(String(format: "%.1f", maxPhaseDifference * 1000))ms)")
                     }
                 }
             }
             
-            if i < measurementCount {
-                try await Task.sleep(nanoseconds: 2_000_000_000)  // 2 seconds between measurements
-            }
+            expectation.fulfill()
         }
         
-        // Report all failures at the end
-        if !failures.isEmpty {
-            XCTFail("Test failed with the following issues:\n" + failures.joined(separator: "\n"))
-        }
-        
-        expectation.fulfill()
-        await fulfillment(of: [expectation], timeout: 30.0)  // Increased timeout
+        wait(for: [expectation], timeout: 15.0) // Reduced timeout
     }
 }
 

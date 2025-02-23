@@ -80,6 +80,11 @@ class AudioManager: ObservableObject {
     private let debounceQueue = DispatchQueue(label: "com.typebeat.debounce")
     private let minimumToggleInterval: TimeInterval = 0.2
     
+    // Add these properties
+    private let syncQueue = DispatchQueue(label: "com.typebeat.sync", qos: .userInitiated)
+    private var phantomBuffer: AVAudioPCMBuffer?
+    private var phantomPlayer: AVAudioPlayerNode?
+    
     private init() {
         setupAudioSession()
         setupEngine()
@@ -520,6 +525,11 @@ class AudioManager: ObservableObject {
             
             await MainActor.run {
                 activeSamples.insert(sample.id)
+            }
+            
+            // Schedule a phantom sync operation
+            syncQueue.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                self?.performPhantomSync()
             }
             
         } catch {
@@ -967,6 +977,53 @@ class AudioManager: ObservableObject {
     
     func getSampleRate(for sampleId: Int) -> Float {
         varispeedNodes[sampleId]?.rate ?? 0
+    }
+
+    private func performPhantomSync() {
+        // Create phantom player if needed
+        if phantomPlayer == nil {
+            phantomPlayer = AVAudioPlayerNode()
+            phantomBuffer = createSilentBuffer() // 1-beat silent buffer
+            engine.attach(phantomPlayer!)
+            engine.connect(phantomPlayer!, to: engine.mainMixerNode, format: nil)
+        }
+        
+        guard let player = phantomPlayer,
+              let buffer = phantomBuffer else { return }
+        
+        // Quick add and remove of phantom player
+        let currentPhase = loopProgress()
+        let startTime = AVAudioTime(hostTime: mach_absolute_time())
+        
+        player.play()
+        player.scheduleBuffer(buffer, at: startTime, options: [])
+        
+        // Remove phantom after one beat
+        syncQueue.asyncAfter(deadline: .now() + 0.1) {
+            player.stop()
+        }
+    }
+
+    private func createSilentBuffer() -> AVAudioPCMBuffer? {
+        let format = engine.mainMixerNode.outputFormat(forBus: 0)
+        let sampleRate = format.sampleRate
+        let frameCount = AVAudioFrameCount(sampleRate * 0.1) // 100ms of silence
+        
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format,
+                                          frameCapacity: frameCount) else { return nil }
+        
+        buffer.frameLength = frameCount
+        
+        // Fill with silence
+        for channel in 0..<Int(format.channelCount) {
+            if let data = buffer.floatChannelData?[channel] {
+                for frame in 0..<Int(frameCount) {
+                    data[frame] = 0.0
+                }
+            }
+        }
+        
+        return buffer
     }
 }
 
