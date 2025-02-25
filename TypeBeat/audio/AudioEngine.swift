@@ -65,7 +65,7 @@ class ModernAudioEngine: AudioEngineProtocol {
     
     private let engine = AVAudioEngine()
     private let beatClock: BeatClock
-    private var players: [Int: SyncedPlayer] = [:]
+    private var players: [Int: ModernSyncedPlayer] = [:]
     private let mixer = AVAudioMixerNode()
     
     private let tempoSubject = CurrentValueSubject<Double, Never>(94.0)
@@ -134,8 +134,7 @@ class ModernAudioEngine: AudioEngineProtocol {
     
     private func updatePlaybackRates() {
         for player in players.values {
-            // Implementation will depend on SyncedPlayer details
-            // This would adjust playback rates based on tempo and pitchLock
+            player.updatePlaybackRate()
         }
     }
     
@@ -148,8 +147,7 @@ class ModernAudioEngine: AudioEngineProtocol {
         let nextBeat = beatClock.currentBeat() + 1.0 // Simple implementation for next beat
         
         for player in players.values {
-            // Implementation will depend on SyncedPlayer details
-            // This would schedule all players to start at the same beat
+            player.scheduleStart(atBeat: nextBeat)
         }
         
         // Update playback state
@@ -160,7 +158,7 @@ class ModernAudioEngine: AudioEngineProtocol {
         guard isPlaying else { return }
         
         for player in players.values {
-            // Stop all players
+            player.stop()
         }
         
         // Update playback state
@@ -168,34 +166,23 @@ class ModernAudioEngine: AudioEngineProtocol {
     }
     
     func loadSample(_ sample: Sample) -> SamplePlayerProtocol? {
-        // For now, return a mock implementation to make tests pass
-        class MockPlayer: SamplePlayerProtocol {
-            let id: Int
-            let sample: Sample
-            var isPlaying: Bool = false
-            var volume: Float = 1.0
-            var playbackRate: Float = 1.0
-            
-            init(sample: Sample) {
-                self.id = sample.id
-                self.sample = sample
-            }
-            
-            func currentPhase() -> Double {
-                return 0.0
-            }
-            
-            func calculateDrift() -> Double {
-                return 0.0
-            }
-        }
+        // Create a new ModernSyncedPlayer
+        let player = ModernSyncedPlayer(
+            sample: sample,
+            engine: engine,
+            beatClock: beatClock,
+            pitchLocked: pitchLock
+        )
         
-        return MockPlayer(sample: sample)
+        // Store the player
+        players[sample.id] = player
+        
+        return player
     }
     
     func unloadSample(withId sampleId: Int) {
         if let player = players[sampleId] {
-            // Stop and disconnect the player
+            player.stop()
             players.removeValue(forKey: sampleId)
         }
     }

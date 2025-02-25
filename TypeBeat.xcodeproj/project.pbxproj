@@ -57,6 +57,7 @@
 				Tests/AudioTimingTests.swift,
 				Tests/BeatClockTests.swift,
 				Tests/ModernAudioEngineTests.swift,
+				Tests/ModernSyncedPlayerTests.swift,
 				Tests/SyncedPlayerTests.swift,
 				Tests/TrackManagerTests.swift,
 			);
@@ -78,6 +79,7 @@
 				Tests/AudioTimingTests.swift,
 				Tests/BeatClockTests.swift,
 				Tests/ModernAudioEngineTests.swift,
+				Tests/ModernSyncedPlayerTests.swift,
 				Tests/SyncedPlayerTests.swift,
 				Tests/TrackManagerTests.swift,
 				TypeBeatUITests/TypeBeatUITests.swift,
