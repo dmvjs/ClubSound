@@ -85,6 +85,10 @@ class AudioManager: ObservableObject {
     private var phantomBuffer: AVAudioPCMBuffer?
     private var phantomPlayer: AVAudioPlayerNode?
     
+    // Add this property to AudioManager
+    private var masterClockTimer: Timer?
+    private let clockCorrectionInterval = 1.0 // Correct every second
+    
     private init() {
         setupAudioSession()
         setupEngine()
@@ -872,6 +876,7 @@ class AudioManager: ObservableObject {
         Task { @MainActor in
             isPlaying = true
             await startAllPlayersInSync()
+            startMasterClock() // Start the master clock correction
         }
     }
 
@@ -1024,6 +1029,62 @@ class AudioManager: ObservableObject {
         }
         
         return buffer
+    }
+
+    // Add this method to start a high-precision master clock
+    private func startMasterClock() {
+        stopMasterClock() // Ensure any existing timer is invalidated
+        
+        // Create a high-precision timer on the main thread
+        masterClockTimer = Timer.scheduledTimer(withTimeInterval: clockCorrectionInterval, repeats: true) { [weak self] _ in
+            self?.performClockCorrection()
+        }
+        
+        // Make sure timer runs even during scrolling
+        RunLoop.main.add(masterClockTimer!, forMode: .common)
+    }
+    
+    private func stopMasterClock() {
+        masterClockTimer?.invalidate()
+        masterClockTimer = nil
+    }
+    
+    // Add this method to perform periodic clock correction
+    private func performClockCorrection() {
+        guard isPlaying, !players.isEmpty else { return }
+        
+        // Get a reference player (first one)
+        guard let (referenceId, referencePlayer) = players.first,
+              let referenceTime = referencePlayer.lastRenderTime,
+              referenceTime.isSampleTimeValid else { return }
+        
+        let sampleRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
+        let framesPerLoop = AVAudioFramePosition(masterLoopDuration * sampleRate)
+        
+        // Calculate reference position
+        let referencePosition = referenceTime.sampleTime % framesPerLoop
+        
+        // Check all other players against reference
+        for (id, player) in players where id != referenceId {
+            guard let playerTime = player.lastRenderTime,
+                  playerTime.isSampleTimeValid,
+                  let buffer = buffers[id] else { continue }
+            
+            let playerPosition = playerTime.sampleTime % framesPerLoop
+            let drift = abs(playerPosition - referencePosition)
+            
+            // If drift exceeds threshold (1ms), correct it
+            if drift > Int64(sampleRate * 0.001) {
+                // Calculate correction time
+                let correction = AVAudioTime(
+                    sampleTime: referenceTime.sampleTime + (framesPerLoop - referencePosition),
+                    atRate: sampleRate
+                )
+                
+                // Schedule buffer at next loop boundary with precise timing
+                player.scheduleBuffer(buffer, at: correction, options: [.loops, .interruptsAtLoop])
+            }
+        }
     }
 }
 
