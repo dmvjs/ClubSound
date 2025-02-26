@@ -33,6 +33,9 @@ protocol AudioEngineProtocol {
     
     /// Get current phase position (0.0-1.0) in the master loop
     func currentPhase() -> Double
+    
+    /// Set volume for a specific sample
+    func setVolume(for sampleId: Int, volume: Float)
 }
 
 /// Protocol for individual sample players
@@ -189,6 +192,13 @@ class ModernAudioEngine: AudioEngineProtocol {
     
     func currentPhase() -> Double {
         return beatClock.currentPhase()
+    }
+    
+    func setVolume(for sampleId: Int, volume: Float) {
+        if let player = players[sampleId] {
+            // Assuming players[sampleId] is a reference type
+            player.volume = volume
+        }
     }
 }
 
