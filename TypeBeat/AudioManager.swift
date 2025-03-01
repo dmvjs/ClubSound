@@ -443,11 +443,6 @@ class AudioManager: ObservableObject {
         // Check if this is a phantom sample
         let isPhantom = sample.id == phantomSampleId
         
-        // If this is a phantom sample, take special precautions
-        if isPhantom {
-            print("Adding phantom sample with ID \(sample.id) - ensuring silence")
-        }
-        
         do {
             // Create and configure nodes
             let player = AVAudioPlayerNode()
