@@ -61,7 +61,7 @@ struct ContentView: View {
                             KeyIndexView(
                                 groupedSamples: groupedSamples,
                                 activeKey: activeKey,
-                                activeBPM: activeBPM,
+                                selectedBPM: activeBPM,
                                 onSelection: { key in
                                     handleKeySelection(key, proxy)
                                 }
@@ -174,8 +174,9 @@ struct ContentView: View {
     }
 
     private func handleBPMSelection(_ bpm: Double, _ proxy: ScrollViewProxy) {
-        // Only scroll, don't change BPM
+        // Update the active BPM
         withAnimation {
+            activeBPM = bpm
             proxy.scrollTo("\(Int(bpm))", anchor: .top)
         }
         
@@ -186,6 +187,9 @@ struct ContentView: View {
 
     private func handleKeySelection(_ key: MusicKey, _ proxy: ScrollViewProxy) {
         withAnimation {
+            // Update the active key
+            activeKey = key
+            
             // Only scroll if we have an active BPM
             if let bpm = activeBPM {
                 proxy.scrollTo("\(Int(bpm))-\(key.rawValue)", anchor: .top)

@@ -80,6 +80,14 @@ class AudioManager: ObservableObject {
     private let debounceQueue = DispatchQueue(label: "com.typebeat.debounce")
     private let minimumToggleInterval: TimeInterval = 0.2
     
+    // Add these properties to your class
+    private var phantomPlayer: AVAudioPlayerNode?
+    private var phantomBuffer: AVAudioPCMBuffer?
+    
+    // Add these properties to your class
+    private var phantomSampleId: Int = -999
+    private var isPerformingPhantomSync = false
+    
     private init() {
         setupAudioSession()
         setupEngine()
@@ -126,6 +134,9 @@ class AudioManager: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        
+        // Initialize the phantom reference track
+        initializePhantomReference()
     }
     
     private func setupAudioSession() {
@@ -429,6 +440,9 @@ class AudioManager: ObservableObject {
     }
     
     func addSampleToPlay(_ sample: Sample) async {
+        // Check if this is a phantom sample
+        let isPhantom = sample.id == phantomSampleId
+        
         do {
             // Create and configure nodes
             let player = AVAudioPlayerNode()
@@ -437,7 +451,7 @@ class AudioManager: ObservableObject {
             let timePitch = AVAudioUnitTimePitch()
             
             // Force volume to zero initially
-            mixer.outputVolume = 0
+            mixer.outputVolume = 0.0
             
             // Load and setup buffer
             var url: URL?
@@ -483,6 +497,16 @@ class AudioManager: ObservableObject {
             timePitchNodes[sample.id] = timePitch
             buffers[sample.id] = buffer
             
+            // If this is the phantom sample, keep volume at zero
+            if isPhantom {
+                mixer.outputVolume = 0.0
+            } else {
+                // Otherwise set to normal volume (after a slight delay to prevent clicks)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    mixer.outputVolume = 0.0 
+                }
+            }
+            
             // If playing, sync with master clock
             if isPlaying, let masterStartTime = masterStartTime {
                 // Force a resync of all players to ensure tight phase lock
@@ -524,6 +548,17 @@ class AudioManager: ObservableObject {
             
         } catch {
             print("Error adding sample: \(error)")
+        }
+        
+        // If we're playing and this isn't the phantom sample, perform the hack
+        if isPlaying && !isPhantom && !isPerformingPhantomSync {
+            // Wait a moment for this sample to start playing
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+            
+            // Perform the phantom sync hack
+            DispatchQueue.main.async { [weak self] in
+                self?.performPhantomSyncHack()
+            }
         }
     }
 
@@ -863,6 +898,20 @@ class AudioManager: ObservableObject {
             isPlaying = true
             await startAllPlayersInSync()
         }
+        
+        // Ensure phantom reference is playing
+        if let phantomPlayer = phantomPlayer, let phantomBuffer = phantomBuffer {
+            phantomPlayer.stop()
+            phantomPlayer.scheduleBuffer(phantomBuffer, at: nil, options: [.loops])
+            phantomPlayer.play()
+        }
+        
+        // After starting playback, perform the phantom sync hack
+        if !isPerformingPhantomSync {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.performPhantomSyncHack()
+            }
+        }
     }
 
     private func secondsToHostTime(_ seconds: Double) -> UInt64 {
@@ -967,6 +1016,137 @@ class AudioManager: ObservableObject {
     
     func getSampleRate(for sampleId: Int) -> Float {
         varispeedNodes[sampleId]?.rate ?? 0
+    }
+
+    // Add this method to initialize the phantom reference track
+    private func initializePhantomReference() {
+        // Only initialize once
+        guard phantomPlayer == nil else { return }
+        
+        // Create a silent buffer for timing reference
+        let sampleRate: Double = 44100.0
+        let frameCount = AVAudioFrameCount(sampleRate * 4) // 4 seconds at 44.1kHz
+        
+        // Create a silent buffer
+        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            return
+        }
+        
+        // Fill with silence
+        for i in 0..<Int(frameCount) {
+            buffer.floatChannelData?[0][i] = 0.0
+        }
+        buffer.frameLength = frameCount
+        
+        // Create and configure phantom player
+        let player = AVAudioPlayerNode()
+        let mixer = AVAudioMixerNode()
+        
+        // Set volume to absolute zero
+        mixer.volume = 0.0
+        
+        // Connect to engine
+        engine.attach(player)
+        engine.attach(mixer)
+        engine.connect(player, to: mixer, format: format)
+        engine.connect(mixer, to: engine.mainMixerNode, format: format)
+        
+        // Store references
+        phantomPlayer = player
+        phantomBuffer = buffer
+        
+        // Schedule the buffer to loop continuously
+        player.scheduleBuffer(buffer, at: nil, options: [.loops])
+        player.play()
+    }
+
+    // Modify your enforcePhaseAlignment method to use phantom as reference
+    private func enforcePhaseAlignment() {
+        guard isPlaying, !activeSamples.isEmpty else { return }
+        
+        // Get the exact loop progress (0.0 to 1.0)
+        let currentPhase = loopProgress()
+        
+        // Ensure phantom is playing and aligned
+        if let phantomPlayer = phantomPlayer, let phantomBuffer = phantomBuffer {
+            phantomPlayer.stop()
+            phantomPlayer.scheduleBuffer(phantomBuffer, at: nil, options: [.loops])
+            phantomPlayer.play()
+        }
+        
+        // Now align all other players to the phantom
+        for sampleId in activeSamples {
+            guard let player = players[sampleId],
+                  let buffer = buffers[sampleId] else { continue }
+            
+            // Stop the player
+            player.stop()
+            
+            // Schedule the buffer with precise phase alignment
+            player.scheduleBuffer(buffer, at: nil, options: [.loops])
+            
+            // Start immediately
+            player.play()
+        }
+    }
+
+    // Modify the performPhantomSyncHack method to ensure complete silence
+    private func performPhantomSyncHack() {
+        // Prevent recursive calls
+        guard !isPerformingPhantomSync, isPlaying else { return }
+        
+        isPerformingPhantomSync = true
+        
+        // Choose a sample to use as phantom (preferably a different one than what's playing)
+        let availableSamples = samples.filter { !activeSamples.contains($0.id) }
+        guard let phantomSample = availableSamples.first ?? samples.first else {
+            isPerformingPhantomSync = false
+            return
+        }
+        
+        // Set the phantom sample ID before adding it
+        phantomSampleId = phantomSample.id
+        
+        // Create a special flag to indicate this is a phantom sample
+        // This will be checked in addSampleToPlay to ensure volume is zero from the start
+        
+        Task {
+            // First, create a mixer with zero volume and store it before adding the sample
+            let preemptiveMixer = AVAudioMixerNode()
+            preemptiveMixer.outputVolume = 0.0
+            
+            // Add the phantom sample with special handling
+            await addSampleToPlay(phantomSample)
+            
+            // Double-check volume is zero immediately after adding
+            DispatchQueue.main.async { [weak self] in
+                if let mixer = self?.mixers[phantomSample.id] {
+                    // Force volume to absolute zero and disable the node if possible
+                    mixer.outputVolume = 0.0
+                    mixer.volume = 0.0 // Try both properties
+                }
+                
+                // Also try to mute the player directly if possible
+                if let player = self?.players[phantomSample.id] {
+                    // Some players have volume control
+                    if player.responds(to: #selector(setter: AVAudioPlayerNode.volume)) {
+                        player.setValue(0.0, forKey: "volume")
+                    }
+                }
+            }
+            
+            // Wait a moment for sync to take effect
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+            
+            // Remove the phantom sample
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.removeSampleFromPlay(phantomSample)
+                self.phantomSampleId = -999
+                self.isPerformingPhantomSync = false
+            }
+        }
     }
 }
 
