@@ -55,11 +55,6 @@
 			membershipExceptions = (
 				Tests/AudioManagerTests.swift,
 				Tests/AudioTimingTests.swift,
-				Tests/BeatClockTests.swift,
-				Tests/ModernAudioEngineTests.swift,
-				Tests/ModernSyncedPlayerTests.swift,
-				Tests/SyncedPlayerTests.swift,
-				Tests/TrackManagerTests.swift,
 			);
 			target = 4F9713DE2D62C23A00996AC9 /* TypeBeatTests */;
 		};
@@ -77,11 +72,6 @@
 				Info.plist,
 				Tests/AudioManagerTests.swift,
 				Tests/AudioTimingTests.swift,
-				Tests/BeatClockTests.swift,
-				Tests/ModernAudioEngineTests.swift,
-				Tests/ModernSyncedPlayerTests.swift,
-				Tests/SyncedPlayerTests.swift,
-				Tests/TrackManagerTests.swift,
 				TypeBeatUITests/TypeBeatUITests.swift,
 				TypeBeatUITests/TypeBeatUITestsLaunchTests.swift,
 			);
