@@ -1028,8 +1028,6 @@ class AudioManager: ObservableObject {
         // Only initialize once
         guard phantomPlayer == nil else { return }
         
-        print("Initializing phantom reference track")
-        
         // Create a silent buffer for timing reference
         let sampleRate: Double = 44100.0
         let frameCount = AVAudioFrameCount(sampleRate * 4) // 4 seconds at 44.1kHz
@@ -1037,7 +1035,6 @@ class AudioManager: ObservableObject {
         // Create a silent buffer
         let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
-            print("Failed to create phantom buffer")
             return
         }
         
@@ -1067,15 +1064,11 @@ class AudioManager: ObservableObject {
         // Schedule the buffer to loop continuously
         player.scheduleBuffer(buffer, at: nil, options: [.loops])
         player.play()
-        
-        print("Phantom reference track initialized")
     }
 
     // Modify your enforcePhaseAlignment method to use phantom as reference
     private func enforcePhaseAlignment() {
         guard isPlaying, !activeSamples.isEmpty else { return }
-        
-        print("Enforcing phase alignment with phantom reference")
         
         // Get the exact loop progress (0.0 to 1.0)
         let currentPhase = loopProgress()
@@ -1101,8 +1094,6 @@ class AudioManager: ObservableObject {
             // Start immediately
             player.play()
         }
-        
-        print("Phase alignment enforced at \(currentPhase)")
     }
 
     // Modify the performPhantomSyncHack method to ensure complete silence
@@ -1110,7 +1101,6 @@ class AudioManager: ObservableObject {
         // Prevent recursive calls
         guard !isPerformingPhantomSync, isPlaying else { return }
         
-        print("Performing phantom sync hack")
         isPerformingPhantomSync = true
         
         // Choose a sample to use as phantom (preferably a different one than what's playing)
@@ -1160,7 +1150,6 @@ class AudioManager: ObservableObject {
                 self.removeSampleFromPlay(phantomSample)
                 self.phantomSampleId = -999
                 self.isPerformingPhantomSync = false
-                print("Phantom sync hack completed")
             }
         }
     }

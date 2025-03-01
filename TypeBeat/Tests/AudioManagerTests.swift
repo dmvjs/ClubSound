@@ -164,7 +164,7 @@ class AudioManagerTests: XCTestCase {
         audioManager.play()
         
         // Wait for playback to stabilize
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        try? await Task.sleep(nanoseconds: 100_000_000)
         
         let initialProgress = audioManager.loopProgress()
         
