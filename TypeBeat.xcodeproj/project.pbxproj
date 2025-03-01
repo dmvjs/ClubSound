@@ -90,11 +90,6 @@
 			path = TypeBeat;
 			sourceTree = "<group>";
 		};
-		4F9713E02D62C23A00996AC9 /* TypeBeatTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = TypeBeatTests;
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -135,7 +130,6 @@
 			isa = PBXGroup;
 			children = (
 				4F497EFD2CF9648C003DA4FE /* TypeBeat */,
-				4F9713E02D62C23A00996AC9 /* TypeBeatTests */,
 				4F2A85752D03F023000EDAC9 /* Frameworks */,
 				4F497EFC2CF9648C003DA4FE /* Products */,
 				4FC39BC32CF96B0B00458DB7 /* ColorExtensions.swift */,
@@ -190,9 +184,6 @@
 			);
 			dependencies = (
 				4F9713E42D62C23A00996AC9 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				4F9713E02D62C23A00996AC9 /* TypeBeatTests */,
 			);
 			name = TypeBeatTests;
 			packageProductDependencies = (
