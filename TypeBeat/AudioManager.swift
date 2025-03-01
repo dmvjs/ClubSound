@@ -440,8 +440,13 @@ class AudioManager: ObservableObject {
     }
     
     func addSampleToPlay(_ sample: Sample) async {
-        // Skip phantom sync for the phantom sample itself
-        let isPhantomSample = sample.id == phantomSampleId
+        // Check if this is a phantom sample
+        let isPhantom = sample.id == phantomSampleId
+        
+        // If this is a phantom sample, take special precautions
+        if isPhantom {
+            print("Adding phantom sample with ID \(sample.id) - ensuring silence")
+        }
         
         do {
             // Create and configure nodes
@@ -451,7 +456,7 @@ class AudioManager: ObservableObject {
             let timePitch = AVAudioUnitTimePitch()
             
             // Force volume to zero initially
-            mixer.outputVolume = 0
+            mixer.outputVolume = 0.0
             
             // Load and setup buffer
             var url: URL?
@@ -498,12 +503,12 @@ class AudioManager: ObservableObject {
             buffers[sample.id] = buffer
             
             // If this is the phantom sample, keep volume at zero
-            if isPhantomSample {
+            if isPhantom {
                 mixer.outputVolume = 0.0
             } else {
                 // Otherwise set to normal volume (after a slight delay to prevent clicks)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    mixer.outputVolume = 0.5 // Or whatever default volume you want
+                    mixer.outputVolume = 0.0 
                 }
             }
             
@@ -551,7 +556,7 @@ class AudioManager: ObservableObject {
         }
         
         // If we're playing and this isn't the phantom sample, perform the hack
-        if isPlaying && !isPhantomSample && !isPerformingPhantomSync {
+        if isPlaying && !isPhantom && !isPerformingPhantomSync {
             // Wait a moment for this sample to start playing
             try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
             
@@ -1100,7 +1105,7 @@ class AudioManager: ObservableObject {
         print("Phase alignment enforced at \(currentPhase)")
     }
 
-    // Add this method to perform the phantom sync hack automatically
+    // Modify the performPhantomSyncHack method to ensure complete silence
     private func performPhantomSyncHack() {
         // Prevent recursive calls
         guard !isPerformingPhantomSync, isPlaying else { return }
@@ -1115,18 +1120,34 @@ class AudioManager: ObservableObject {
             return
         }
         
-        // Add the phantom sample (this will trigger the sync behavior)
+        // Set the phantom sample ID before adding it
         phantomSampleId = phantomSample.id
         
+        // Create a special flag to indicate this is a phantom sample
+        // This will be checked in addSampleToPlay to ensure volume is zero from the start
+        
         Task {
-            // Add the phantom sample
+            // First, create a mixer with zero volume and store it before adding the sample
+            let preemptiveMixer = AVAudioMixerNode()
+            preemptiveMixer.outputVolume = 0.0
+            
+            // Add the phantom sample with special handling
             await addSampleToPlay(phantomSample)
             
-            // Immediately set its volume to zero
+            // Double-check volume is zero immediately after adding
             DispatchQueue.main.async { [weak self] in
                 if let mixer = self?.mixers[phantomSample.id] {
-                    // Force volume to absolute zero
+                    // Force volume to absolute zero and disable the node if possible
                     mixer.outputVolume = 0.0
+                    mixer.volume = 0.0 // Try both properties
+                }
+                
+                // Also try to mute the player directly if possible
+                if let player = self?.players[phantomSample.id] {
+                    // Some players have volume control
+                    if player.responds(to: #selector(setter: AVAudioPlayerNode.volume)) {
+                        player.setValue(0.0, forKey: "volume")
+                    }
                 }
             }
             
