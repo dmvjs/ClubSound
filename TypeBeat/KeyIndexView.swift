@@ -19,7 +19,7 @@ struct KeyIndexView: View {
                 let isSelected = isThisKeySelected(key)
                 
                 Text(key.localizedName)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 13, weight: .bold))
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .foregroundColor(isSelected ? .white : key.color)

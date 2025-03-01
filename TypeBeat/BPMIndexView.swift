@@ -18,7 +18,7 @@ struct BPMIndexView: View {
                 let isSelected = isThisBPMSelected(bpm)
                 
                 Text("\(Int(bpm))")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 13, weight: .bold))
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
                     .foregroundColor(isSelected ? .white : .white.opacity(0.5))
