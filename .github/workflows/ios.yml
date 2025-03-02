@@ -22,6 +22,73 @@ jobs:
         
     - name: Fix platform-specific code
       run: |
+        # Create MusicKey enum
+        echo "Creating MusicKey enum..."
+        cat > TypeBeat/MusicKey.swift << 'EOF'
+        import Foundation
+
+        enum MusicKey: String, CaseIterable, Identifiable {
+            case C
+            case CSharp
+            case D
+            case DSharp
+            case E
+            case F
+            case FSharp
+            case G
+            case GSharp
+            case A
+            case ASharp
+            case B
+            
+            var id: String { self.rawValue }
+            
+            var displayName: String {
+                switch self {
+                case .C: return "C"
+                case .CSharp: return "C#"
+                case .D: return "D"
+                case .DSharp: return "D#"
+                case .E: return "E"
+                case .F: return "F"
+                case .FSharp: return "F#"
+                case .G: return "G"
+                case .GSharp: return "G#"
+                case .A: return "A"
+                case .ASharp: return "A#"
+                case .B: return "B"
+                }
+            }
+        }
+        EOF
+        
+        # Fix NowPlayingView
+        echo "Creating cross-platform NowPlayingView..."
+        cat > TypeBeat/NowPlayingView.swift << 'EOF'
+        import SwiftUI
+
+        struct NowPlayingView: View {
+            @EnvironmentObject var appState: AppState
+            @ObservedObject var audioManager = AudioManager.shared
+            @State private var mainVolume: Double = 0.8
+            
+            var body: some View {
+                VStack {
+                    Text("Now Playing")
+                        .font(.title)
+                        .padding()
+                    
+                    MainVolumeControl(audioManager: audioManager, volume: $mainVolume)
+                        .padding()
+                    
+                    NowPlayingList()
+                        .environmentObject(appState)
+                }
+                .padding()
+            }
+        }
+        EOF
+        
         # Fix Sample model
         echo "Creating Sample model with additional properties..."
         cat > TypeBeat/Sample.swift << 'EOF'
