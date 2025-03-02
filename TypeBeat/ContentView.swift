@@ -11,6 +11,10 @@ struct ContentView: View {
     @State private var mainVolume: Float = 0.69
     @State private var isTransitioning: Bool = false
     @State private var progressTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+    @State private var useRandomSongs: Bool = false
+    @State private var songCounter: Int = 0
+    @State private var tempoIndex: Int = 0
+    private let tempoOptions: [Double] = [84.0, 94.0, 102.0]
 
     // Group samples by BPM and Key, sorted by tempo and key
     private var groupedSamples: [(Double, [(MusicKey, [Sample])])] {
@@ -221,11 +225,10 @@ struct ContentView: View {
      * This provides variety each time the app is launched.
      */
     private func selectRandomKeyAndTempo() {
-        // Get all available keys and tempos from samples
+        // Get all available keys from samples
         let allKeys = Set(samples.map { $0.key })
-        let allTempos = Set(samples.map { $0.bpm })
         
-        // Select random key and tempo if available
+        // Select random key if available
         if let randomKey = allKeys.randomElement() {
             activeKey = randomKey
         } else {
@@ -233,24 +236,18 @@ struct ContentView: View {
             activeKey = .C
         }
         
-        // Select a random tempo from common values or from available samples
-        let commonTempos = [69.0, 84.0, 94.0, 102.0, 120.0, 128.0]
-        
-        if !allTempos.isEmpty {
-            // Prefer to use a tempo from actual samples
-            activeBPM = allTempos.randomElement()
-        } else if !commonTempos.isEmpty {
-            // Fallback to common tempos
-            activeBPM = commonTempos.randomElement()
-        } else {
-            // Ultimate fallback
-            activeBPM = 84.0
-        }
+        // Select initial tempo from our predefined options
+        // Start with a random index
+        tempoIndex = Int.random(in: 0..<tempoOptions.count)
+        activeBPM = tempoOptions[tempoIndex]
         
         // Update the audio manager with the selected tempo
         if let tempo = activeBPM {
             audioManager.updateBPM(to: tempo)
         }
+        
+        // Reset song counter
+        songCounter = 0
     }
     
     /**
@@ -340,38 +337,103 @@ struct ContentView: View {
             print("Starting transition at progress: \(progress)")
             isTransitioning = true
             
-            // Determine the next key with available samples
-            guard let currentKey = activeKey, let nextKey = getNextKeyWithSamples(from: currentKey) else {
-                print("Failed to find any key with samples")
-                isTransitioning = false
-                return
-            }
+            // Increment song counter
+            songCounter += 1
             
-            print("Transitioning from key \(currentKey) to \(nextKey)")
+            // Check if we need to change tempo (every 12 songs)
+            if songCounter >= 12 {
+                // Reset counter
+                songCounter = 0
+                
+                // Move to next tempo
+                tempoIndex = (tempoIndex + 1) % tempoOptions.count
+                let newTempo = tempoOptions[tempoIndex]
+                
+                print("Changing tempo to \(newTempo) BPM after 12 songs")
+                
+                // Update BPM
+                activeBPM = newTempo
+                audioManager.updateBPM(to: newTempo)
+            }
             
             // Store current samples to fade out
             let currentSamples = nowPlaying
             print("Current samples: \(currentSamples.map { $0.title })")
             
-            // Get samples matching the next key
-            let samplesInKey = samples.filter { $0.key == nextKey }
-            print("Found \(samplesInKey.count) samples in key \(nextKey)")
+            // Toggle between random songs and key-based songs
+            useRandomSongs.toggle()
             
-            // Get one or two random samples
             var nextSamples: [Sample] = []
-            if samplesInKey.count >= 2 {
-                let shuffled = samplesInKey.shuffled()
-                nextSamples = Array(shuffled.prefix(2))
+            var nextKey: MusicKey? = activeKey
+            
+            if useRandomSongs {
+                // RANDOM MODE: Pick completely random samples
+                print("Using random song selection mode")
+                
+                // Get two random samples from all available samples
+                let shuffledSamples = samples.shuffled()
+                if shuffledSamples.count >= 2 {
+                    nextSamples = Array(shuffledSamples.prefix(2))
+                } else if !shuffledSamples.isEmpty {
+                    nextSamples = [shuffledSamples[0]]
+                }
+                
+                // If we found samples, update the key to match the first sample
+                if !nextSamples.isEmpty {
+                    nextKey = nextSamples[0].key
+                    print("Selected random samples: \(nextSamples.map { $0.title })")
+                    print("New key will be: \(nextKey!)")
+                } else {
+                    print("No samples available at all")
+                    isTransitioning = false
+                    return
+                }
             } else {
-                nextSamples = [samplesInKey[0]]
+                // KEY-BASED MODE: Find samples in a neighboring key
+                print("Using key-based selection mode")
+                guard let currentKey = activeKey else {
+                    print("No active key set")
+                    isTransitioning = false
+                    return
+                }
+                
+                // Find a neighboring key with samples
+                nextKey = getNextKeyWithSamples(from: currentKey)
+                
+                if let key = nextKey {
+                    print("Selected next key: \(key)")
+                    
+                    // Get samples matching the next key
+                    let samplesInKey = samples.filter { $0.key == key }
+                    print("Found \(samplesInKey.count) samples in key \(key)")
+                    
+                    // Get one or two random samples
+                    if samplesInKey.count >= 2 {
+                        let shuffled = samplesInKey.shuffled()
+                        nextSamples = Array(shuffled.prefix(2))
+                    } else if !samplesInKey.isEmpty {
+                        nextSamples = [samplesInKey[0]]
+                    }
+                    
+                    print("Selected key-based samples: \(nextSamples.map { $0.title })")
+                } else {
+                    print("Failed to find any key with samples")
+                    isTransitioning = false
+                    return
+                }
             }
             
-            print("Selected next samples: \(nextSamples.map { $0.title })")
+            // If we couldn't find any samples, abort
+            if nextSamples.isEmpty {
+                print("No suitable samples found for transition")
+                isTransitioning = false
+                return
+            }
             
             // Update the active key on main thread
             await MainActor.run {
                 activeKey = nextKey
-                print("Updated active key to \(nextKey)")
+                print("Updated active key to \(String(describing: nextKey))")
             }
             
             // CRITICAL: Add a significant delay before any audio operations
