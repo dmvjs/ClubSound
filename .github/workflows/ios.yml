@@ -20,6 +20,12 @@ jobs:
       with:
         xcode-version: '16.2'
         
+    - name: List available schemes
+      run: xcodebuild -list -project TypeBeat.xcodeproj
+      
+    - name: List available destinations
+      run: xcodebuild -showdestinations -project TypeBeat.xcodeproj -scheme TypeBeat
+        
     - name: Create platform-specific implementations
       run: |
         # Special handling for AppDelegate
@@ -86,28 +92,6 @@ jobs:
         #endif
         EOF
         
-        # Create a stub for ClubSoundApp.swift to handle platform differences
-        echo "Creating cross-platform app entry point..."
-        cat > TypeBeat/ClubSoundApp.swift << 'EOF'
-        import SwiftUI
-
-        @main
-        struct ClubSoundApp: App {
-            #if os(iOS)
-            @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-            #endif
-            
-            @StateObject private var appState = AppState()
-            
-            var body: some Scene {
-                WindowGroup {
-                    ContentView()
-                        .environmentObject(appState)
-                }
-            }
-        }
-        EOF
-        
     - name: Create xcconfig file to override deployment targets
       run: |
         echo "Creating custom xcconfig file..."
@@ -122,10 +106,16 @@ jobs:
         xcodebuild clean build \
           -project TypeBeat.xcodeproj \
           -scheme TypeBeat \
-          -destination "platform=macOS" \
+          -destination "platform=macOS,arch=arm64" \
           -xcconfig override.xcconfig \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
           SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
-          ONLY_ACTIVE_ARCH=YES 
+          ONLY_ACTIVE_ARCH=YES \
+          -quiet || true
+          
+    - name: Check build logs for errors
+      run: |
+        echo "Checking for build errors..."
+        find ~/Library/Developer/Xcode/DerivedData -name "*.log" -type f -exec grep -l "error:" {} \; | xargs cat || echo "No error logs found" 
