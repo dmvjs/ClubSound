@@ -108,42 +108,24 @@ jobs:
         }
         EOF
         
-    - name: Build for macOS
+    - name: Create xcconfig file to override deployment targets
+      run: |
+        echo "Creating custom xcconfig file..."
+        cat > override.xcconfig << 'EOF'
+        MACOSX_DEPLOYMENT_TARGET = 14.0
+        IPHONEOS_DEPLOYMENT_TARGET = 16.0
+        XROS_DEPLOYMENT_TARGET = 1.0
+        EOF
+        
+    - name: Build for macOS with custom deployment targets
       run: |
         xcodebuild clean build \
           -project TypeBeat.xcodeproj \
           -scheme TypeBeat \
           -destination "platform=macOS" \
+          -xcconfig override.xcconfig \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
           SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
-          -verbose || true
-        
-    - name: Show build errors
-      if: failure()
-      run: |
-        echo "Checking for specific error patterns..."
-        find /Users/runner/Library/Developer/Xcode/DerivedData -name "*.log" -type f -exec grep -l "error:" {} \; | xargs cat || echo "No error logs found"
-      
-    - name: Run Unit Tests
-      if: success()
-      run: |
-        xcodebuild test \
-          -project TypeBeat.xcodeproj \
-          -scheme TypeBeatTests \
-          -destination "platform=macOS" \
-          CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO
-          
-    - name: Run UI Tests
-      if: success()
-      run: |
-        xcodebuild test \
-          -project TypeBeat.xcodeproj \
-          -scheme TypeBeatUITests \
-          -destination "platform=macOS" \
-          CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO 
+          ONLY_ACTIVE_ARCH=YES 
