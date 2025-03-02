@@ -22,6 +22,112 @@ jobs:
         
     - name: Fix platform-specific code
       run: |
+        # Create Sample model
+        echo "Creating Sample model..."
+        cat > TypeBeat/Sample.swift << 'EOF'
+        import Foundation
+
+        struct Sample: Identifiable, Equatable {
+            let id: UUID
+            let name: String
+            let url: URL
+            
+            static func == (lhs: Sample, rhs: Sample) -> Bool {
+                return lhs.id == rhs.id
+            }
+        }
+        EOF
+        
+        # Fix SampleRow
+        echo "Creating cross-platform SampleRow..."
+        cat > TypeBeat/SampleRow.swift << 'EOF'
+        import SwiftUI
+
+        struct SampleRow: View {
+            let sample: Sample
+            let isInPlaylist: Bool
+            let addToNowPlaying: (Sample) -> Void
+            let removeFromNowPlaying: (Sample) -> Void
+            
+            var body: some View {
+                HStack {
+                    Text(sample.name)
+                        .font(.headline)
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        if isInPlaylist {
+                            removeFromNowPlaying(sample)
+                        } else {
+                            addToNowPlaying(sample)
+                            #if os(iOS)
+                            HapticFeedback.mediumImpact()
+                            #endif
+                        }
+                    }) {
+                        Image(systemName: isInPlaylist ? "minus.circle" : "plus.circle")
+                            .foregroundColor(isInPlaylist ? .red : .green)
+                            .font(.title2)
+                    }
+                }
+                .padding()
+                .background(Color.gray.opacity(0.2))
+                .cornerRadius(10)
+            }
+        }
+        EOF
+        
+        # Fix SampleScrollView
+        echo "Creating cross-platform SampleScrollView..."
+        cat > TypeBeat/SampleScrollView.swift << 'EOF'
+        import SwiftUI
+
+        struct SampleScrollView: View {
+            @EnvironmentObject var appState: AppState
+            @State private var showingRecordView = false
+            
+            var body: some View {
+                NavigationView {
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            ForEach($appState.samples) { $sample in
+                                SampleRow(
+                                    sample: sample,
+                                    isInPlaylist: appState.isSampleInNowPlaying(sample),
+                                    addToNowPlaying: { appState.addSampleToNowPlaying($0) },
+                                    removeFromNowPlaying: { appState.removeSampleFromNowPlaying($0) }
+                                )
+                            }
+                            
+                            Button(action: {
+                                showingRecordView = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundColor(.green)
+                                    Text("sample.record_new".localized)
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(10)
+                            }
+                        }
+                        .padding()
+                    }
+                    .navigationTitle("samples.title".localized)
+                    #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                    #endif
+                }
+                .sheet(isPresented: $showingRecordView) {
+                    SampleRecordView()
+                }
+            }
+        }
+        EOF
+        
         # Fix AppDelegate
         echo "Creating cross-platform AppDelegate..."
         cat > TypeBeat/AppDelegate.swift << 'EOF'
@@ -330,56 +436,6 @@ jobs:
         }
         EOF
         
-        # Fix SampleScrollView
-        echo "Creating cross-platform SampleScrollView..."
-        cat > TypeBeat/SampleScrollView.swift << 'EOF'
-        import SwiftUI
-
-        struct SampleScrollView: View {
-            @EnvironmentObject var appState: AppState
-            @State private var showingRecordView = false
-            
-            var body: some View {
-                NavigationView {
-                    ScrollView {
-                        LazyVStack(spacing: 10) {
-                            ForEach($appState.samples) { $sample in
-                                SampleRow(
-                                    sample: sample,
-                                    isInPlaylist: appState.isSampleInNowPlaying(sample),
-                                    addToNowPlaying: { appState.addSampleToNowPlaying($0) },
-                                    removeFromNowPlaying: { appState.removeSampleFromNowPlaying($0) }
-                                )
-                            }
-                            
-                            Button(action: {
-                                showingRecordView = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "plus.circle.fill")
-                                        .foregroundColor(.green)
-                                    Text("sample.record_new".localized)
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color(.systemBackground))
-                                .cornerRadius(10)
-                            }
-                        }
-                        .padding()
-                    }
-                    .navigationTitle("samples.title".localized)
-                    #if os(iOS)
-                    .navigationBarTitleDisplayMode(.inline)
-                    #endif
-                }
-                .sheet(isPresented: $showingRecordView) {
-                    SampleRecordView()
-                }
-            }
-        }
-        EOF
-        
         # Fix SettingsView
         echo "Creating cross-platform SettingsView..."
         cat > TypeBeat/SettingsView.swift << 'EOF'
@@ -572,46 +628,6 @@ jobs:
             
             func isSampleInNowPlaying(_ sample: Sample) -> Bool {
                 return nowPlaying.contains(where: { $0.id == sample.id })
-            }
-        }
-        EOF
-        
-        # Fix SampleRow
-        echo "Creating cross-platform SampleRow..."
-        cat > TypeBeat/SampleRow.swift << 'EOF'
-        import SwiftUI
-
-        struct SampleRow: View {
-            let sample: Sample
-            let isInPlaylist: Bool
-            let addToNowPlaying: (Sample) -> Void
-            let removeFromNowPlaying: (Sample) -> Void
-            
-            var body: some View {
-                HStack {
-                    Text(sample.name)
-                        .font(.headline)
-                    
-                    Spacer()
-                    
-                    Button(action: {
-                        if isInPlaylist {
-                            removeFromNowPlaying(sample)
-                        } else {
-                            addToNowPlaying(sample)
-                            #if os(iOS)
-                            HapticFeedback.mediumImpact()
-                            #endif
-                        }
-                    }) {
-                        Image(systemName: isInPlaylist ? "minus.circle" : "plus.circle")
-                            .foregroundColor(isInPlaylist ? .red : .green)
-                            .font(.title2)
-                    }
-                }
-                .padding()
-                .background(Color(.secondarySystemBackground))
-                .cornerRadius(10)
             }
         }
         EOF
