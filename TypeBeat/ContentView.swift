@@ -101,6 +101,9 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            // Enable wake lock on app launch
+            wakeLockManager.enableWakeLock()
+            
             // Randomly select initial key and tempo
             selectRandomKeyAndTempo()
             
@@ -366,28 +369,54 @@ struct ContentView: View {
             var nextSamples: [Sample] = []
             var nextKey: MusicKey? = activeKey
             
+            // Get the current tempo
+            guard let currentTempo = activeBPM else {
+                print("No active tempo set")
+                isTransitioning = false
+                return
+            }
+            
+            // Get samples matching the current tempo (with a small tolerance)
+            let tempoTolerance = 0.5 // Allow 0.5 BPM difference
+            let samplesMatchingTempo = samples.filter { 
+                abs($0.bpm - currentTempo) <= tempoTolerance 
+            }
+            
+            if samplesMatchingTempo.isEmpty {
+                print("No samples found matching tempo \(currentTempo)")
+                isTransitioning = false
+                return
+            }
+            
+            print("Found \(samplesMatchingTempo.count) samples matching tempo \(currentTempo)")
+            
             if useRandomSongs {
-                // RANDOM MODE: Pick completely random samples
+                // RANDOM MODE: Pick one tempo-matched sample and one random sample
                 print("Using random song selection mode")
                 
-                // Get two random samples from all available samples
-                let shuffledSamples = samples.shuffled()
-                if shuffledSamples.count >= 2 {
-                    nextSamples = Array(shuffledSamples.prefix(2))
-                } else if !shuffledSamples.isEmpty {
-                    nextSamples = [shuffledSamples[0]]
-                }
-                
-                // If we found samples, update the key to match the first sample
-                if !nextSamples.isEmpty {
-                    nextKey = nextSamples[0].key
-                    print("Selected random samples: \(nextSamples.map { $0.title })")
-                    print("New key will be: \(nextKey!)")
+                // First, get one random sample that matches the tempo
+                if let tempoMatchedSample = samplesMatchingTempo.randomElement() {
+                    nextSamples.append(tempoMatchedSample)
+                    print("Selected tempo-matched sample: \(tempoMatchedSample.title)")
+                    
+                    // Set the key based on this sample
+                    nextKey = tempoMatchedSample.key
+                    
+                    // Then get one completely random sample (can be any tempo)
+                    // Filter out the already selected sample
+                    let remainingSamples = samples.filter { $0.id != tempoMatchedSample.id }
+                    if let randomSample = remainingSamples.randomElement() {
+                        nextSamples.append(randomSample)
+                        print("Selected random sample (any tempo): \(randomSample.title)")
+                    }
                 } else {
-                    print("No samples available at all")
+                    print("Failed to select a tempo-matched sample")
                     isTransitioning = false
                     return
                 }
+                
+                print("New key will be: \(nextKey!)")
+                
             } else {
                 // KEY-BASED MODE: Find samples in a neighboring key
                 print("Using key-based selection mode")
@@ -397,27 +426,36 @@ struct ContentView: View {
                     return
                 }
                 
-                // Find a neighboring key with samples
-                nextKey = getNextKeyWithSamples(from: currentKey)
+                // Find a neighboring key with at least one sample matching the tempo
+                nextKey = getNextKeyWithSamplesMatchingTempo(from: currentKey, tempo: currentTempo)
                 
                 if let key = nextKey {
                     print("Selected next key: \(key)")
                     
-                    // Get samples matching the next key
-                    let samplesInKey = samples.filter { $0.key == key }
-                    print("Found \(samplesInKey.count) samples in key \(key)")
+                    // Get one sample matching the next key and tempo
+                    let samplesInKeyWithTempo = samplesMatchingTempo.filter { $0.key == key }
+                    print("Found \(samplesInKeyWithTempo.count) samples in key \(key) matching tempo \(currentTempo)")
                     
-                    // Get one or two random samples
-                    if samplesInKey.count >= 2 {
-                        let shuffled = samplesInKey.shuffled()
-                        nextSamples = Array(shuffled.prefix(2))
-                    } else if !samplesInKey.isEmpty {
-                        nextSamples = [samplesInKey[0]]
+                    if let tempoMatchedSample = samplesInKeyWithTempo.randomElement() {
+                        nextSamples.append(tempoMatchedSample)
+                        print("Selected tempo-matched sample in key \(key): \(tempoMatchedSample.title)")
+                        
+                        // Get one sample in the same key but any tempo
+                        let samplesInKey = samples.filter { 
+                            $0.key == key && $0.id != tempoMatchedSample.id 
+                        }
+                        
+                        if let anyTempoSample = samplesInKey.randomElement() {
+                            nextSamples.append(anyTempoSample)
+                            print("Selected any-tempo sample in key \(key): \(anyTempoSample.title)")
+                        }
+                    } else {
+                        print("Failed to select a tempo-matched sample in key \(key)")
+                        isTransitioning = false
+                        return
                     }
-                    
-                    print("Selected key-based samples: \(nextSamples.map { $0.title })")
                 } else {
-                    print("Failed to find any key with samples")
+                    print("Failed to find any key with samples matching tempo \(currentTempo)")
                     isTransitioning = false
                     return
                 }
@@ -571,6 +609,41 @@ struct ContentView: View {
         case .ASharp: return .F
         case .F: return .C
         }
+    }
+
+    /**
+     * Gets the next key in the circle of fifths progression that matches the given tempo.
+     * 
+     * @param currentKey The current key
+     * @param tempo The target tempo
+     * @return The next key in the progression that matches the given tempo
+     */
+    private func getNextKeyWithSamplesMatchingTempo(from currentKey: MusicKey, tempo: Double) -> MusicKey? {
+        // Start with the next key in the circle of fifths
+        var nextKey = getNextKey(from: currentKey)
+        
+        // Try up to 12 keys (full circle) to find one with samples matching the given tempo
+        for _ in 0..<12 {
+            guard let key = nextKey else { return nil }
+            
+            // Check if there are samples in this key matching the given tempo
+            let samplesInKey = samples.filter { $0.key == key && abs($0.bpm - tempo) <= 0.5 }
+            if !samplesInKey.isEmpty {
+                print("Found \(samplesInKey.count) samples in key \(key) matching tempo \(tempo)")
+                return key
+            }
+            
+            print("No samples in key \(key) matching tempo \(tempo), trying next key")
+            nextKey = getNextKey(from: key)
+            
+            // If we've gone full circle, break to avoid infinite loop
+            if nextKey == currentKey {
+                break
+            }
+        }
+        
+        // If we couldn't find any key with samples matching the given tempo, return nil
+        return nil
     }
 }
 

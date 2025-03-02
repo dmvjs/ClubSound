@@ -40,6 +40,27 @@ struct TempoButtonRow: View {
         .sheet(isPresented: $showingLanguageSelection) {
             LanguageSelectionView()
         }
+        .onAppear {
+            // Enable wake lock on app launch
+            wakeLockManager.enableWakeLock()
+            
+            // Force pitch lock to be enabled on app launch
+            // Try different approaches to ensure it works
+            
+            // Direct property access if possible
+            if audioManager.pitchLock == false {
+                print("Setting pitch lock via toggle")
+                audioManager.togglePitchLockWithoutRestart()
+            }
+            
+            // Ensure it's on with a slight delay to allow UI to initialize
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if audioManager.pitchLock == false {
+                    print("Setting pitch lock with delay")
+                    audioManager.togglePitchLockWithoutRestart()
+                }
+            }
+        }
     }
 }
 
