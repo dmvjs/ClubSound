@@ -154,6 +154,10 @@ jobs:
         cat > TypeBeat/ClubSoundApp.swift << 'EOF'
         import SwiftUI
 
+        #if os(iOS)
+        import UIKit
+        #endif
+
         @main
         struct ClubSoundApp: App {
             @StateObject private var appState = AppState()
@@ -174,8 +178,6 @@ jobs:
             
             private func setupAppearance() {
                 #if os(iOS)
-                import UIKit
-                
                 if let window = UIApplication.shared.connectedScenes
                     .first(where: { $0 is UIWindowScene }) as? UIWindowScene {
                     window.windows.first?.backgroundColor = UIColor(
