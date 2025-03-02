@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Build
+    name: Build and Test
     runs-on: macos-14
     
     steps:
@@ -1342,7 +1342,7 @@ jobs:
         XROS_DEPLOYMENT_TARGET = 1.0
         EOF
         
-    - name: Build for macOS with custom deployment targets
+    - name: Build for macOS
       run: |
         xcodebuild clean build \
           -project TypeBeat.xcodeproj \
@@ -1353,10 +1353,23 @@ jobs:
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
           SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
-          ONLY_ACTIVE_ARCH=YES \
-          -quiet || true
+          ONLY_ACTIVE_ARCH=YES
+          
+    - name: Run Tests
+      run: |
+        xcodebuild test \
+          -project TypeBeat.xcodeproj \
+          -scheme TypeBeat \
+          -destination "platform=macOS,arch=arm64" \
+          -xcconfig override.xcconfig \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
+          ONLY_ACTIVE_ARCH=YES
           
     - name: Check build logs for errors
+      if: ${{ failure() }}
       run: |
         echo "Checking for build errors..."
         find ~/Library/Developer/Xcode/DerivedData -name "*.log" -type f -exec grep -l "error:" {} \; | xargs cat || echo "No error logs found" 
