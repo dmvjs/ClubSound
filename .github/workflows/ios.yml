@@ -78,6 +78,34 @@ jobs:
         }
         EOF
         
+        # Create SampleRecordView stub
+        echo "Creating SampleRecordView stub..."
+        cat > TypeBeat/SampleRecordView.swift << 'EOF'
+        import SwiftUI
+
+        struct SampleRecordView: View {
+            @Environment(\.presentationMode) var presentationMode
+            
+            var body: some View {
+                NavigationView {
+                    VStack {
+                        Text("Record a new sample")
+                            .font(.headline)
+                            .padding()
+                        
+                        Spacer()
+                        
+                        Button("Cancel") {
+                            presentationMode.wrappedValue.dismiss()
+                        }
+                        .padding()
+                    }
+                    .navigationTitle("Record Sample")
+                }
+            }
+        }
+        EOF
+        
         # Fix SampleScrollView
         echo "Creating cross-platform SampleScrollView..."
         cat > TypeBeat/SampleScrollView.swift << 'EOF'
