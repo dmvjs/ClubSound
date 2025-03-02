@@ -462,7 +462,6 @@ let samples: [Sample] = [
     Sample(id: 586, title: "Wait Remix", key: .DSharp, bpm: 102, fileName: "00000586-body"),
     Sample(id: 594, title: "Understand", key: .E, bpm: 102, fileName: "00000594-body"),
     Sample(id: 598, title: "Throw a Fit", key: .C, bpm: 102, fileName: "00000598-body"),
-    Sample(id: 599, title: "Repeat", key: .FSharp, bpm: 102, fileName: "00000599-body"),
     Sample(id: 600, title: "Git It Girl", key: .GSharp, bpm: 102, fileName: "00000600-body"),
     Sample(id: 601, title: "Ease Back", key: .C, bpm: 102, fileName: "00000601-body"),
     Sample(id: 602, title: "I'll Be", key: .C, bpm: 102, fileName: "00000602-body"),

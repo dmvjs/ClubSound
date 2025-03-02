@@ -255,7 +255,7 @@ struct ContentView: View {
     
     /**
      * Loads two random samples of the selected key.
-     * This populates the initial playback queue.
+     * This populates the initial playback queue with volumes set to 50%.
      */
     private func loadRandomSamples() {
         guard let currentKey = activeKey else { return }
@@ -271,13 +271,66 @@ struct ContentView: View {
                 shuffledSamples = Array(shuffledSamples.prefix(2))
             }
             
-            // Add the samples to nowPlaying
+            // First add all samples to UI
             for sample in shuffledSamples {
-                addToNowPlaying(sample: sample)
+                // Set initial volume to 50% (0.5) in the UI
+                sampleVolumes[sample.id] = 0.5
+                
+                // Add to UI
+                nowPlaying.append(sample)
+            }
+            
+            // Then load and set volumes with a delay to ensure proper initialization
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                for sample in shuffledSamples {
+                    // Handle audio setup
+                    Task {
+                        // Add the sample to play
+                        await self.audioManager.addSampleToPlay(sample)
+                        
+                        // Force volume to 50% with multiple attempts
+                        self.audioManager.setVolume(for: sample, volume: 0.5)
+                        print("Initial set volume for \(sample.title) to 0.5")
+                        
+                        // Try again after a short delay
+                        try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                        self.audioManager.setVolume(for: sample, volume: 0.5)
+                        print("Second attempt set volume for \(sample.title) to 0.5")
+                        
+                        // Notify observers
+                        self.audioManager.objectWillChange.send()
+                    }
+                }
             }
         } else if !samplesInKey.isEmpty {
-            // If we have only one sample in this key, use it
-            addToNowPlaying(sample: samplesInKey[0])
+            // If we have only one sample in this key, use it with 50% volume
+            let sample = samplesInKey[0]
+            
+            // Set initial volume to 50% (0.5) in the UI
+            sampleVolumes[sample.id] = 0.5
+            
+            // Add to UI
+            nowPlaying.append(sample)
+            
+            // Load and set volume with a delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                Task {
+                    // Add the sample to play
+                    await self.audioManager.addSampleToPlay(sample)
+                    
+                    // Force volume to 50% with multiple attempts
+                    self.audioManager.setVolume(for: sample, volume: 0.5)
+                    print("Initial set volume for \(sample.title) to 0.5")
+                    
+                    // Try again after a short delay
+                    try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                    self.audioManager.setVolume(for: sample, volume: 0.5)
+                    print("Second attempt set volume for \(sample.title) to 0.5")
+                    
+                    // Notify observers
+                    self.audioManager.objectWillChange.send()
+                }
+            }
         } else {
             // If no samples in the selected key, try a different key
             activeKey = MusicKey.allCases.randomElement()
@@ -391,34 +444,30 @@ struct ContentView: View {
             print("Found \(samplesMatchingTempo.count) samples matching tempo \(currentTempo)")
             
             if useRandomSongs {
-                // RANDOM MODE: Pick one tempo-matched sample and one random sample
+                // RANDOM MODE: Pick random samples that match the tempo
                 print("Using random song selection mode")
                 
-                // First, get one random sample that matches the tempo
-                if let tempoMatchedSample = samplesMatchingTempo.randomElement() {
-                    nextSamples.append(tempoMatchedSample)
-                    print("Selected tempo-matched sample: \(tempoMatchedSample.title)")
-                    
-                    // Set the key based on this sample
-                    nextKey = tempoMatchedSample.key
-                    
-                    // Then get one completely random sample (can be any tempo)
-                    // Filter out the already selected sample
-                    let remainingSamples = samples.filter { $0.id != tempoMatchedSample.id }
-                    if let randomSample = remainingSamples.randomElement() {
-                        nextSamples.append(randomSample)
-                        print("Selected random sample (any tempo): \(randomSample.title)")
-                    }
+                // Get two random samples from tempo-matched samples
+                let shuffledSamples = samplesMatchingTempo.shuffled()
+                if shuffledSamples.count >= 2 {
+                    nextSamples = Array(shuffledSamples.prefix(2))
+                    print("Selected 2 random samples matching tempo \(currentTempo): \(nextSamples.map { $0.title })")
+                } else if !shuffledSamples.isEmpty {
+                    nextSamples = [shuffledSamples[0]]
+                    print("Selected 1 random sample matching tempo \(currentTempo): \(nextSamples.map { $0.title })")
+                }
+                
+                // If we found samples, update the key to match the first sample
+                if !nextSamples.isEmpty {
+                    nextKey = nextSamples[0].key
+                    print("New key will be: \(nextKey!)")
                 } else {
-                    print("Failed to select a tempo-matched sample")
+                    print("No samples available at all")
                     isTransitioning = false
                     return
                 }
-                
-                print("New key will be: \(nextKey!)")
-                
             } else {
-                // KEY-BASED MODE: Find samples in a neighboring key
+                // KEY-BASED MODE: Find samples in a neighboring key that match the tempo
                 print("Using key-based selection mode")
                 guard let currentKey = activeKey else {
                     print("No active key set")
@@ -426,33 +475,24 @@ struct ContentView: View {
                     return
                 }
                 
-                // Find a neighboring key with at least one sample matching the tempo
+                // Find a neighboring key with samples that match the tempo
                 nextKey = getNextKeyWithSamplesMatchingTempo(from: currentKey, tempo: currentTempo)
                 
                 if let key = nextKey {
                     print("Selected next key: \(key)")
                     
-                    // Get one sample matching the next key and tempo
-                    let samplesInKeyWithTempo = samplesMatchingTempo.filter { $0.key == key }
-                    print("Found \(samplesInKeyWithTempo.count) samples in key \(key) matching tempo \(currentTempo)")
+                    // Get samples matching the next key and tempo
+                    let samplesInKey = samplesMatchingTempo.filter { $0.key == key }
+                    print("Found \(samplesInKey.count) samples in key \(key) matching tempo \(currentTempo)")
                     
-                    if let tempoMatchedSample = samplesInKeyWithTempo.randomElement() {
-                        nextSamples.append(tempoMatchedSample)
-                        print("Selected tempo-matched sample in key \(key): \(tempoMatchedSample.title)")
-                        
-                        // Get one sample in the same key but any tempo
-                        let samplesInKey = samples.filter { 
-                            $0.key == key && $0.id != tempoMatchedSample.id 
-                        }
-                        
-                        if let anyTempoSample = samplesInKey.randomElement() {
-                            nextSamples.append(anyTempoSample)
-                            print("Selected any-tempo sample in key \(key): \(anyTempoSample.title)")
-                        }
-                    } else {
-                        print("Failed to select a tempo-matched sample in key \(key)")
-                        isTransitioning = false
-                        return
+                    // Get one or two random samples
+                    if samplesInKey.count >= 2 {
+                        let shuffled = samplesInKey.shuffled()
+                        nextSamples = Array(shuffled.prefix(2))
+                        print("Selected 2 key-based samples matching tempo \(currentTempo): \(nextSamples.map { $0.title })")
+                    } else if !samplesInKey.isEmpty {
+                        nextSamples = [samplesInKey[0]]
+                        print("Selected 1 key-based sample matching tempo \(currentTempo): \(nextSamples.map { $0.title })")
                     }
                 } else {
                     print("Failed to find any key with samples matching tempo \(currentTempo)")
@@ -466,6 +506,15 @@ struct ContentView: View {
                 print("No suitable samples found for transition")
                 isTransitioning = false
                 return
+            }
+            
+            // Verify all selected samples match the tempo
+            for sample in nextSamples {
+                let tempoDiff = abs(sample.bpm - currentTempo)
+                print("Sample \(sample.title) has tempo \(sample.bpm), diff from current \(currentTempo): \(tempoDiff)")
+                if tempoDiff > tempoTolerance {
+                    print("WARNING: Sample \(sample.title) does not match current tempo!")
+                }
             }
             
             // Update the active key on main thread
