@@ -22,18 +22,446 @@ jobs:
         
     - name: Fix platform-specific code
       run: |
-        # Create Sample model
-        echo "Creating Sample model..."
+        # Fix Sample model
+        echo "Creating Sample model with additional properties..."
         cat > TypeBeat/Sample.swift << 'EOF'
         import Foundation
+        import SwiftUI
 
         struct Sample: Identifiable, Equatable {
             let id: UUID
             let name: String
             let url: URL
+            let key: MusicKey
+            let bpm: Int
             
             static func == (lhs: Sample, rhs: Sample) -> Bool {
                 return lhs.id == rhs.id
+            }
+            
+            func keyColor() -> Color {
+                switch key {
+                case .C: return .blue
+                case .CSharp: return .green
+                case .D: return .yellow
+                case .DSharp: return .orange
+                case .E: return .red
+                case .F: return .purple
+                case .FSharp: return .pink
+                case .G: return .gray
+                case .GSharp: return .black
+                case .A: return .white
+                case .ASharp: return .brown
+                case .B: return .cyan
+                }
+            }
+        }
+        EOF
+        
+        # Fix KeyIndexView
+        echo "Creating cross-platform KeyIndexView..."
+        cat > TypeBeat/KeyIndexView.swift << 'EOF'
+        import SwiftUI
+
+        struct KeyIndexView: View {
+            @Binding var activeKey: MusicKey
+            @Binding var selectedBPM: Int?
+            
+            let keys = MusicKey.allCases
+            
+            var body: some View {
+                VStack(alignment: .leading) {
+                    Text("Key")
+                        .font(.headline)
+                        .padding(.leading)
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(keys) { key in
+                                KeyButton(
+                                    key: key,
+                                    isActive: activeKey == key
+                                )
+                                .onTapGesture {
+                                    activeKey = key
+                                }
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+                .onChange(of: activeKey) { newValue in
+                    // Handle key change
+                }
+                .onChange(of: selectedBPM) { _ in
+                    // Handle BPM change
+                }
+            }
+        }
+
+        struct KeyButton: View {
+            let key: MusicKey
+            let isActive: Bool
+            
+            var body: some View {
+                Text(key.displayName)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(isActive ? .white : .primary)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        Circle()
+                            .fill(keyColor())
+                            .opacity(isActive ? 1.0 : 0.3)
+                    )
+            }
+            
+            func keyColor() -> Color {
+                switch key {
+                case .C: return .blue
+                case .CSharp: return .green
+                case .D: return .yellow
+                case .DSharp: return .orange
+                case .E: return .red
+                case .F: return .purple
+                case .FSharp: return .pink
+                case .G: return .gray
+                case .GSharp: return .black
+                case .A: return .white
+                case .ASharp: return .brown
+                case .B: return .cyan
+                }
+            }
+        }
+        EOF
+        
+        # Fix AudioManager
+        echo "Creating cross-platform AudioManager..."
+        cat > TypeBeat/AudioManager.swift << 'EOF'
+        import Foundation
+        import AVFoundation
+        import Combine
+
+        class AudioManager: ObservableObject {
+            static let shared = AudioManager()
+            
+            @Published var isPlaying: Bool = false
+            
+            private var audioPlayers: [UUID: AVAudioPlayer] = [:]
+            private var audioEngine = AVAudioEngine()
+            private var audioPlayerNode = AVAudioPlayerNode()
+            
+            // Instead of accessing TypeBeat.samples, we'll use the samples from AppState
+            private var samples: [Sample] = []
+            
+            init() {
+                setupAudioEngine()
+            }
+            
+            private func setupAudioEngine() {
+                audioEngine.attach(audioPlayerNode)
+                audioEngine.connect(audioPlayerNode, to: audioEngine.mainMixerNode, format: nil)
+                
+                do {
+                    try audioEngine.start()
+                } catch {
+                    print("Error starting audio engine: \(error.localizedDescription)")
+                }
+            }
+            
+            func loadSamples(from appState: AppState) {
+                self.samples = appState.samples
+            }
+            
+            func playSample(_ sample: Sample) {
+                do {
+                    let audioPlayer = try AVAudioPlayer(contentsOf: sample.url)
+                    audioPlayers[sample.id] = audioPlayer
+                    audioPlayer.play()
+                    isPlaying = true
+                } catch {
+                    print("Error playing sample: \(error.localizedDescription)")
+                }
+            }
+            
+            func stopSample(_ sample: Sample) {
+                if let audioPlayer = audioPlayers[sample.id] {
+                    audioPlayer.stop()
+                    audioPlayers.removeValue(forKey: sample.id)
+                    if audioPlayers.isEmpty {
+                        isPlaying = false
+                    }
+                }
+            }
+            
+            func stopAllSamples() {
+                for (_, player) in audioPlayers {
+                    player.stop()
+                }
+                audioPlayers.removeAll()
+                isPlaying = false
+            }
+            
+            func setMasterVolume(_ volume: Double) {
+                audioEngine.mainMixerNode.outputVolume = Float(volume)
+            }
+        }
+        EOF
+        
+        # Fix MainVolumeControl
+        echo "Creating cross-platform MainVolumeControl..."
+        cat > TypeBeat/MainVolumeControl.swift << 'EOF'
+        import SwiftUI
+
+        struct MainVolumeControl: View {
+            @ObservedObject var audioManager: AudioManager
+            @Binding var volume: Double
+            
+            var body: some View {
+                VStack {
+                    Text("Master Volume")
+                        .font(.headline)
+                    
+                    ZStack {
+                        Circle()
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 2)
+                            .frame(width: 100, height: 100)
+                        
+                        Circle()
+                            .trim(from: 0, to: CGFloat(volume))
+                            .stroke(Color.blue, lineWidth: 4)
+                            .frame(width: 100, height: 100)
+                            .rotationEffect(.degrees(-90))
+                        
+                        Text("\(Int(volume * 100))%")
+                            .font(.system(size: 18, weight: .bold))
+                    }
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                updateVolume(with: value)
+                            }
+                    )
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.gray.opacity(0.4))
+                )
+                .onChange(of: volume) { newValue in
+                    audioManager.setMasterVolume(newValue)
+                }
+            }
+            
+            private func updateVolume(with gesture: DragGesture.Value) {
+                let center = CGPoint(x: 50, y: 50)
+                let value = gesture.location
+                let vector = CGVector(dx: value.x - center.x, dy: value.y - center.y)
+                
+                // Calculate angle
+                let angle = atan2(vector.dy, vector.dx) + .pi/2
+                let normalizedAngle = angle < 0 ? angle + 2 * .pi : angle
+                
+                // Convert to volume (0 to 1)
+                let newVolume = normalizedAngle / (2 * .pi)
+                
+                // Update volume with constraints
+                volume = min(max(newVolume, 0), 1)
+            }
+        }
+        EOF
+        
+        # Fix NowPlayingRow
+        echo "Creating cross-platform NowPlayingRow..."
+        cat > TypeBeat/NowPlayingRow.swift << 'EOF'
+        import SwiftUI
+
+        struct NowPlayingRow: View {
+            let sample: Sample
+            @Binding var volume: Double
+            let onRemove: () -> Void
+            @ObservedObject var audioManager: AudioManager
+            
+            var body: some View {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(sample.name)
+                            .font(.headline)
+                        
+                        Text("\(sample.key.displayName) - \(sample.bpm) BPM")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    Spacer()
+                    
+                    VolumeControl(volume: $volume)
+                        .frame(width: 60, height: 60)
+                    
+                    Button(action: onRemove) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.red)
+                            .font(.title2)
+                    }
+                }
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.gray.opacity(0.2))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(sample.keyColor(), lineWidth: 2)
+                        )
+                )
+            }
+        }
+
+        struct VolumeControl: View {
+            @Binding var volume: Double
+            
+            var body: some View {
+                ZStack {
+                    Circle()
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 2)
+                    
+                    Circle()
+                        .trim(from: 0, to: CGFloat(volume))
+                        .stroke(Color.blue, lineWidth: 4)
+                        .rotationEffect(.degrees(-90))
+                    
+                    Text("\(Int(volume * 100))%")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            updateVolume(with: value)
+                        }
+                )
+            }
+            
+            private func updateVolume(with gesture: DragGesture.Value) {
+                let center = CGPoint(x: 30, y: 30)
+                let value = gesture.location
+                let vector = CGVector(dx: value.x - center.x, dy: value.y - center.y)
+                
+                // Calculate angle
+                let angle = atan2(vector.dy, vector.dx) + .pi/2
+                let normalizedAngle = angle < 0 ? angle + 2 * .pi : angle
+                
+                // Convert to volume (0 to 1)
+                let newVolume = normalizedAngle / (2 * .pi)
+                
+                // Update volume with constraints
+                volume = min(max(newVolume, 0), 1)
+            }
+        }
+        EOF
+        
+        # Fix LanguageSelectionView
+        echo "Creating cross-platform LanguageSelectionView..."
+        cat > TypeBeat/LanguageSelectionView.swift << 'EOF'
+        import SwiftUI
+
+        struct LanguageSelectionView: View {
+            @Environment(\.presentationMode) var presentationMode
+            @AppStorage("appLanguage") var appLanguage: String = "en"
+            
+            let languages = [
+                ("English", "en"),
+                ("Español", "es"),
+                ("Français", "fr"),
+                ("Deutsch", "de"),
+                ("日本語", "ja"),
+                ("中文", "zh")
+            ]
+            
+            var body: some View {
+                NavigationView {
+                    List {
+                        ForEach(languages, id: \.1) { language in
+                            Button(action: {
+                                changeLanguage(to: language.1)
+                            }) {
+                                HStack {
+                                    Text(language.0)
+                                    Spacer()
+                                    if appLanguage == language.1 {
+                                        Image(systemName: "checkmark")
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                            }
+                            .foregroundColor(.primary)
+                        }
+                    }
+                    .navigationTitle("settings.language".localized)
+                    #if os(iOS)
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("common.done".localized) {
+                                presentationMode.wrappedValue.dismiss()
+                            }
+                        }
+                    }
+                    #endif
+                }
+            }
+            
+            private func changeLanguage(to languageCode: String) {
+                appLanguage = languageCode
+                AudioManager.shared.stopAllSamples()
+                presentationMode.wrappedValue.dismiss()
+            }
+        }
+        EOF
+        
+        # Fix NowPlayingList
+        echo "Creating cross-platform NowPlayingList..."
+        cat > TypeBeat/NowPlayingList.swift << 'EOF'
+        import SwiftUI
+
+        struct NowPlayingList: View {
+            @EnvironmentObject var appState: AppState
+            @ObservedObject var audioManager = AudioManager.shared
+            @State private var sampleVolumes: [UUID: Double] = [:]
+            
+            var body: some View {
+                VStack {
+                    if appState.nowPlaying.isEmpty {
+                        Text("nowplaying.empty".localized)
+                            .font(.headline)
+                            .foregroundColor(.gray)
+                            .padding()
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 10) {
+                                ForEach(appState.nowPlaying) { sample in
+                                    NowPlayingRow(
+                                        sample: sample,
+                                        volume: Binding(
+                                            get: { sampleVolumes[sample.id] ?? 0.5 },
+                                            set: { sampleVolumes[sample.id] = $0 }
+                                        ),
+                                        onRemove: {
+                                            appState.removeSampleFromNowPlaying(sample)
+                                        },
+                                        audioManager: audioManager
+                                    )
+                                }
+                            }
+                            .padding()
+                        }
+                    }
+                }
+                .onAppear {
+                    // Initialize volumes
+                    for sample in appState.nowPlaying {
+                        if sampleVolumes[sample.id] == nil {
+                            sampleVolumes[sample.id] = 0.5
+                        }
+                    }
+                }
             }
         }
         EOF
@@ -839,69 +1267,7 @@ jobs:
         }
         EOF
         
-        # Fix AudioManager
-        echo "Creating cross-platform AudioManager..."
-        cat > TypeBeat/AudioManager.swift << 'EOF'
-        import Foundation
-        import AVFoundation
-
-        class AudioManager: ObservableObject {
-            static let shared = AudioManager()
-            
-            private var audioPlayers: [UUID: AVAudioPlayer] = [:]
-            private var audioEngine = AVAudioEngine()
-            private var audioPlayerNode = AVAudioPlayerNode()
-            
-            // Instead of accessing TypeBeat.samples, we'll use the samples from AppState
-            private var samples: [Sample] = []
-            
-            init() {
-                setupAudioEngine()
-            }
-            
-            private func setupAudioEngine() {
-                audioEngine.attach(audioPlayerNode)
-                audioEngine.connect(audioPlayerNode, to: audioEngine.mainMixerNode, format: nil)
-                
-                do {
-                    try audioEngine.start()
-                } catch {
-                    print("Error starting audio engine: \(error.localizedDescription)")
-                }
-            }
-            
-            func loadSamples(from appState: AppState) {
-                self.samples = appState.samples
-            }
-            
-            func playSample(_ sample: Sample) {
-                do {
-                    let audioPlayer = try AVAudioPlayer(contentsOf: sample.url)
-                    audioPlayers[sample.id] = audioPlayer
-                    audioPlayer.play()
-                } catch {
-                    print("Error playing sample: \(error.localizedDescription)")
-                }
-            }
-            
-            func stopSample(_ sample: Sample) {
-                if let audioPlayer = audioPlayers[sample.id] {
-                    audioPlayer.stop()
-                    audioPlayers.removeValue(forKey: sample.id)
-                }
-            }
-            
-            func stopAllSamples() {
-                for (_, player) in audioPlayers {
-                    player.stop()
-                }
-                audioPlayers.removeAll()
-            }
-        }
-        EOF
-        
-    - name: Create xcconfig file to override deployment targets
-      run: |
+        # Create xcconfig file to override deployment targets
         echo "Creating custom xcconfig file..."
         cat > override.xcconfig << 'EOF'
         MACOSX_DEPLOYMENT_TARGET = 14.0
