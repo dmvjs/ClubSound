@@ -22,18 +22,173 @@ jobs:
         
     - name: Fix platform-specific code
       run: |
-        # Create Sample model
-        echo "Creating Sample model..."
-        cat > TypeBeat/Sample.swift << 'EOF'
-        import Foundation
+        # Fix AudioSettingsView
+        echo "Creating cross-platform AudioSettingsView..."
+        cat > TypeBeat/AudioSettingsView.swift << 'EOF'
+        import SwiftUI
 
-        struct Sample: Identifiable, Equatable {
-            let id: UUID
-            let name: String
-            let url: URL
+        struct AudioSettingsView: View {
+            @ObservedObject var audioRouteManager = AudioRouteManager.shared
             
-            static func == (lhs: Sample, rhs: Sample) -> Bool {
-                return lhs.id == rhs.id
+            var body: some View {
+                Form {
+                    Section(header: Text("settings.audio_output".localized)) {
+                        Text("Current Output: \(audioRouteManager.outputName)")
+                        
+                        #if os(iOS)
+                        NavigationLink(destination: AudioOutputPicker()) {
+                            Text("settings.change_output".localized)
+                        }
+                        #endif
+                    }
+                    
+                    Section {
+                        Button("Refresh") {
+                            audioRouteManager.refreshOutputs()
+                        }
+                    }
+                }
+                .navigationTitle("settings.audio_settings".localized)
+            }
+        }
+        EOF
+        
+        # Fix AudioRouteManager
+        echo "Creating cross-platform AudioRouteManager..."
+        cat > TypeBeat/AudioRouteManager.swift << 'EOF'
+        import Foundation
+        import AVFoundation
+
+        class AudioRouteManager: ObservableObject {
+            static let shared = AudioRouteManager()
+            
+            @Published var outputName: String = "Default"
+            
+            #if os(iOS)
+            private var audioSession = AVAudioSession.sharedInstance()
+            #endif
+            
+            init() {
+                refreshOutputs()
+            }
+            
+            func refreshOutputs() {
+                #if os(iOS)
+                do {
+                    try audioSession.setActive(true)
+                    if let portDescription = audioSession.currentRoute.outputs.first {
+                        self.outputName = portDescription.portName
+                    }
+                } catch {
+                    print("Error getting current audio route: \(error.localizedDescription)")
+                }
+                #else
+                // macOS implementation
+                self.outputName = "Default (macOS)"
+                #endif
+            }
+        }
+        EOF
+        
+        # Fix ClubSoundApp
+        echo "Creating cross-platform ClubSoundApp..."
+        cat > TypeBeat/ClubSoundApp.swift << 'EOF'
+        import SwiftUI
+
+        @main
+        struct ClubSoundApp: App {
+            @StateObject private var appState = AppState()
+            
+            #if os(iOS)
+            @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+            #endif
+            
+            var body: some Scene {
+                WindowGroup {
+                    ContentView()
+                        .environmentObject(appState)
+                        .onAppear {
+                            setupAppearance()
+                        }
+                }
+            }
+            
+            private func setupAppearance() {
+                #if os(iOS)
+                import UIKit
+                
+                if let window = UIApplication.shared.connectedScenes
+                    .first(where: { $0 is UIWindowScene }) as? UIWindowScene {
+                    window.windows.first?.backgroundColor = UIColor(
+                        red: 0.1,
+                        green: 0.1,
+                        blue: 0.1,
+                        alpha: 1.0
+                    )
+                }
+                #elseif os(macOS)
+                // macOS appearance customization if needed
+                #endif
+            }
+        }
+        EOF
+        
+        # Fix ContentView
+        echo "Creating cross-platform ContentView..."
+        cat > TypeBeat/ContentView.swift << 'EOF'
+        import SwiftUI
+
+        struct ContentView: View {
+            @EnvironmentObject var appState: AppState
+            @StateObject private var audioManager = AudioManager.shared
+            @State private var mainVolume: Double = 0.8
+            @State private var sampleVolumes: [UUID: Double] = [:]
+            
+            var body: some View {
+                TabView {
+                    SampleScrollView()
+                        .tabItem {
+                            Label("samples.title".localized, systemImage: "music.note.list")
+                        }
+                    
+                    TempoView()
+                        .tabItem {
+                            Label("tempo.title".localized, systemImage: "metronome")
+                        }
+                    
+                    SettingsView()
+                        .tabItem {
+                            Label("settings.title".localized, systemImage: "gear")
+                        }
+                }
+                .onAppear {
+                    setupAudio()
+                }
+            }
+            
+            private func setupAudio() {
+                // Initialize sample volumes
+                for sample in appState.samples {
+                    sampleVolumes[sample.id] = 0.8
+                }
+                
+                // Load samples into audio manager
+                audioManager.loadSamples(from: appState)
+            }
+        }
+
+        struct TempoView: View {
+            @EnvironmentObject var appState: AppState
+            
+            var body: some View {
+                VStack {
+                    Text("Tempo: \(appState.currentBPM) BPM")
+                        .font(.title)
+                        .padding()
+                    
+                    TempoButtonRow()
+                        .padding()
+                }
             }
         }
         EOF
@@ -296,55 +451,6 @@ jobs:
                 ScrollView {
                     content
                 }
-            }
-        }
-        #endif
-        EOF
-        
-        # Fix AudioRouteManager
-        echo "Creating cross-platform AudioRouteManager..."
-        cat > TypeBeat/AudioRouteManager.swift << 'EOF'
-        import Foundation
-        import AVFoundation
-        import Combine
-
-        #if os(iOS)
-        class AudioRouteManager: ObservableObject {
-            @Published var currentOutputName: String = "Speaker"
-            @Published var isBluetoothConnected: Bool = false
-            
-            private var cancellables = Set<AnyCancellable>()
-            private var audioSession = AVAudioSession.sharedInstance()
-            
-            init() {
-                setupNotifications()
-                updateCurrentRoute()
-            }
-            
-            private func setupNotifications() {
-                NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)
-                    .sink { [weak self] _ in
-                        self?.updateCurrentRoute()
-                    }
-                    .store(in: &cancellables)
-            }
-            
-            private func updateCurrentRoute() {
-                let outputs = audioSession.currentRoute.outputs
-                if let output = outputs.first {
-                    currentOutputName = output.portName
-                    isBluetoothConnected = output.portType == .bluetoothA2DP || output.portType == .bluetoothHFP || output.portType == .bluetoothLE
-                }
-            }
-        }
-        #elseif os(macOS)
-        class AudioRouteManager: ObservableObject {
-            @Published var currentOutputName: String = "Speaker"
-            @Published var isBluetoothConnected: Bool = false
-            
-            init() {
-                // macOS implementation would go here
-                // For now, this is a stub
             }
         }
         #endif
