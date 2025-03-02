@@ -20,13 +20,22 @@ jobs:
       with:
         xcode-version: latest-stable
         
+    - name: List Xcode version
+      run: xcodebuild -version
+      
     - name: List available schemes
       run: xcodebuild -list -project TypeBeat.xcodeproj
       
     - name: List available destinations
       run: xcodebuild -showdestinations -project TypeBeat.xcodeproj -scheme TypeBeat
       
-    - name: Build TypeBeat
+    - name: List Swift version
+      run: swift --version
+      
+    - name: List directory structure
+      run: find . -type f -name "*.swift" | sort
+      
+    - name: Build TypeBeat with detailed logs
       run: |
         xcodebuild clean build \
           -project TypeBeat.xcodeproj \
@@ -34,9 +43,24 @@ jobs:
           -destination "platform=macOS" \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO
-          
+          CODE_SIGNING_ALLOWED=NO \
+          SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
+          -verbose
+      continue-on-error: true
+      
+    - name: Try building with xcpretty for cleaner logs
+      run: |
+        set -o pipefail && xcodebuild clean build \
+          -project TypeBeat.xcodeproj \
+          -scheme TypeBeat \
+          -destination "platform=macOS" \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO | xcpretty -c
+      
+    # Only run tests if build succeeds
     - name: Run Unit Tests
+      if: success()
       run: |
         xcodebuild test \
           -project TypeBeat.xcodeproj \
@@ -47,6 +71,7 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
           
     - name: Run UI Tests
+      if: success()
       run: |
         xcodebuild test \
           -project TypeBeat.xcodeproj \
