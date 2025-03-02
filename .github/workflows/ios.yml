@@ -437,6 +437,107 @@ jobs:
         }
         EOF
         
+        # Fix ControlButtonGroup
+        echo "Creating cross-platform ControlButtonGroup..."
+        cat > TypeBeat/TempoButtonRow+ControlButtonGroup.swift << 'EOF'
+        import SwiftUI
+
+        struct ControlButtonGroup: View {
+            @ObservedObject var wakeLockManager: WakeLockManager
+            let onPlayPause: () -> Void
+            let onStop: () -> Void
+            let isPlaying: Bool
+            
+            var body: some View {
+                HStack(spacing: 20) {
+                    Button(action: {
+                        onPlayPause()
+                        #if os(iOS)
+                        HapticFeedback.mediumImpact()
+                        #endif
+                    }) {
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                            .frame(width: 60, height: 60)
+                            .background(Color.green)
+                            .clipShape(Circle())
+                    }
+                    
+                    Button(action: {
+                        onStop()
+                        #if os(iOS)
+                        HapticFeedback.mediumImpact()
+                        #endif
+                    }) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                            .frame(width: 60, height: 60)
+                            .background(Color.red)
+                            .clipShape(Circle())
+                    }
+                    
+                    Button(action: {
+                        wakeLockManager.toggleWakeLock()
+                        #if os(iOS)
+                        HapticFeedback.mediumImpact()
+                        #endif
+                    }) {
+                        Image(systemName: wakeLockManager.isWakeLockEnabled ? "bolt.fill" : "bolt.slash")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                            .frame(width: 60, height: 60)
+                            .background(Color.blue)
+                            .clipShape(Circle())
+                    }
+                }
+            }
+        }
+        EOF
+        
+        # Fix TempoButtonGroup
+        echo "Creating cross-platform TempoButtonGroup..."
+        cat > TypeBeat/TempoButtonRow+TempoButtonGroup.swift << 'EOF'
+        import SwiftUI
+
+        struct TempoButtonGroup: View {
+            @Binding var currentBPM: Int
+            let onIncrease: () -> Void
+            let onDecrease: () -> Void
+            
+            var body: some View {
+                HStack(spacing: 10) {
+                    Button(action: {
+                        onDecrease()
+                        #if os(iOS)
+                        HapticFeedback.mediumImpact()
+                        #endif
+                    }) {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.red)
+                    }
+                    
+                    Text("\(currentBPM) BPM")
+                        .font(.headline)
+                        .frame(width: 80)
+                    
+                    Button(action: {
+                        onIncrease()
+                        #if os(iOS)
+                        HapticFeedback.mediumImpact()
+                        #endif
+                    }) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.green)
+                    }
+                }
+            }
+        }
+        EOF
+        
     - name: Create xcconfig file to override deployment targets
       run: |
         echo "Creating custom xcconfig file..."
