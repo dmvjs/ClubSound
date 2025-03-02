@@ -435,13 +435,13 @@ jobs:
         echo "Creating cross-platform ColorExtensions..."
         cat > ColorExtensions.swift << 'EOF'
         import SwiftUI
+        import UIKit
+        import AppKit
 
         extension Color {
             #if os(iOS)
-            import UIKit
             static let darkGray = Color(UIColor.darkGray)
             #elseif os(macOS)
-            import AppKit
             static let darkGray = Color(NSColor.darkGray)
             #endif
         }
