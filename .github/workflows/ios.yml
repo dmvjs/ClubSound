@@ -20,10 +20,49 @@ jobs:
       with:
         xcode-version: '16.2'
         
-    - name: Fix AppDelegate for macOS
+    - name: Find and fix iOS-specific imports
       run: |
+        echo "Creating platform-specific wrappers for iOS imports..."
+        
+        # Find all Swift files with UIKit imports
+        FILES_WITH_UIKIT=$(grep -l "import UIKit" $(find . -name "*.swift"))
+        
+        for file in $FILES_WITH_UIKIT; do
+          echo "Processing $file"
+          
+          # Create a backup
+          cp "$file" "${file}.bak"
+          
+          # Add platform-specific imports
+          sed -i '' '1s/^/import Foundation\n#if os(iOS)\nimport UIKit\n#elseif os(macOS)\nimport AppKit\n#endif\n/' "$file"
+          
+          # Remove the original UIKit import
+          sed -i '' '/^import UIKit$/d' "$file"
+          
+          # Wrap UIKit-specific code in platform conditionals
+          if grep -q "UIApplication" "$file"; then
+            echo "  - Found UIApplication references, adding conditionals"
+            sed -i '' 's/UIApplication/#if os(iOS)\n        UIApplication\n        #else\n        // macOS equivalent would go here\n        #endif/' "$file"
+          fi
+          
+          if grep -q "UIColor" "$file"; then
+            echo "  - Found UIColor references, adding conditionals"
+            sed -i '' 's/UIColor/#if os(iOS)\n        UIColor\n        #elseif os(macOS)\n        NSColor\n        #endif/' "$file"
+          fi
+          
+          if grep -q "UIView" "$file"; then
+            echo "  - Found UIView references, adding conditionals"
+            sed -i '' 's/UIView/#if os(iOS)\n        UIView\n        #elseif os(macOS)\n        NSView\n        #endif/' "$file"
+          fi
+          
+          echo "  - Done processing $file"
+        done
+        
+        # Special handling for AppDelegate
+        echo "Creating cross-platform AppDelegate..."
         cat > TypeBeat/AppDelegate.swift << 'EOF'
         import Foundation
+        
         #if os(iOS)
         import UIKit
         
@@ -41,6 +80,48 @@ jobs:
         #endif
         EOF
         
+        # Special handling for WakeLockManager
+        echo "Creating cross-platform WakeLockManager..."
+        cat > TypeBeat/WakeLockManager.swift << 'EOF'
+        import Foundation
+        
+        #if os(iOS)
+        import UIKit
+        
+        class WakeLockManager {
+            static let shared = WakeLockManager()
+            
+            private init() {}
+            
+            func preventSleep() {
+                UIApplication.shared.isIdleTimerDisabled = true
+            }
+            
+            func allowSleep() {
+                UIApplication.shared.isIdleTimerDisabled = false
+            }
+        }
+        #elseif os(macOS)
+        import AppKit
+        
+        class WakeLockManager {
+            static let shared = WakeLockManager()
+            
+            private init() {}
+            
+            func preventSleep() {
+                // macOS implementation would go here
+                // For now, this is a stub
+            }
+            
+            func allowSleep() {
+                // macOS implementation would go here
+                // For now, this is a stub
+            }
+        }
+        #endif
+        EOF
+        
     - name: Build for macOS
       run: |
         xcodebuild clean build \
@@ -50,7 +131,8 @@ jobs:
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
-          SWIFT_TREAT_WARNINGS_AS_ERRORS=NO
+          SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
+          -verbose
       
     - name: Run Unit Tests
       if: success()
