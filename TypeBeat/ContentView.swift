@@ -228,29 +228,61 @@ struct ContentView: View {
      * This provides variety each time the app is launched.
      */
     private func selectRandomKeyAndTempo() {
-        // Get all available keys from samples
-        let allKeys = Set(samples.map { $0.key })
-        
-        // Select random key if available
-        if let randomKey = allKeys.randomElement() {
-            activeKey = randomKey
-        } else {
-            // Fallback to C if no samples available
-            activeKey = .C
-        }
-        
         // Select initial tempo from our predefined options
         // Start with a random index
         tempoIndex = Int.random(in: 0..<tempoOptions.count)
         activeBPM = tempoOptions[tempoIndex]
+        
+        print("Selected initial tempo: \(activeBPM ?? 0) BPM")
         
         // Update the audio manager with the selected tempo
         if let tempo = activeBPM {
             audioManager.updateBPM(to: tempo)
         }
         
+        // Find samples matching the selected tempo
+        let tempoTolerance = 0.5
+        let samplesMatchingTempo = samples.filter { sample in
+            guard let tempo = activeBPM else { return false }
+            return abs(sample.bpm - tempo) <= tempoTolerance
+        }
+        
+        if samplesMatchingTempo.isEmpty {
+            print("No samples match the selected tempo \(activeBPM ?? 0), trying a different tempo")
+            // Try a different tempo
+            for tempo in tempoOptions {
+                let matchingSamples = samples.filter { abs($0.bpm - tempo) <= tempoTolerance }
+                if !matchingSamples.isEmpty {
+                    activeBPM = tempo
+                    audioManager.updateBPM(to: tempo)
+                    print("Found matching samples at tempo \(tempo) BPM")
+                    break
+                }
+            }
+        }
+        
+        // Now get all available keys from samples matching the selected tempo
+        let samplesForTempo = samples.filter { sample in
+            guard let tempo = activeBPM else { return false }
+            return abs(sample.bpm - tempo) <= tempoTolerance
+        }
+        
+        let availableKeys = Set(samplesForTempo.map { $0.key })
+        
+        // Select random key from available keys
+        if let randomKey = availableKeys.randomElement() {
+            activeKey = randomKey
+            print("Selected random key \(randomKey) from available keys for tempo \(activeBPM ?? 0)")
+        } else {
+            // Fallback to C if no samples available
+            activeKey = .C
+            print("No keys available for tempo \(activeBPM ?? 0), defaulting to C")
+        }
+        
         // Reset song counter
         songCounter = 0
+        
+        print("Initial setup complete: Tempo \(activeBPM ?? 0) BPM, Key \(activeKey?.rawValue ?? "none")")
     }
     
     /**
@@ -258,15 +290,22 @@ struct ContentView: View {
      * This populates the initial playback queue with volumes set to 50%.
      */
     private func loadRandomSamples() {
-        guard let currentKey = activeKey else { return }
+        guard let currentKey = activeKey, let currentTempo = activeBPM else { return }
         
-        // Get samples matching the selected key
-        let samplesInKey = samples.filter { $0.key == currentKey }
+        print("Loading random samples with key: \(currentKey), tempo: \(currentTempo)")
         
-        // If we have at least 2 samples in this key
-        if samplesInKey.count >= 2 {
-            // Get two random samples
-            var shuffledSamples = samplesInKey.shuffled()
+        // Get samples matching the selected key AND tempo (with small tolerance)
+        let tempoTolerance = 0.5 // Allow 0.5 BPM difference
+        let samplesInKeyAndTempo = samples.filter { 
+            $0.key == currentKey && abs($0.bpm - currentTempo) <= tempoTolerance 
+        }
+        
+        print("Found \(samplesInKeyAndTempo.count) samples matching key \(currentKey) and tempo \(currentTempo)")
+        
+        // If we have samples matching both key and tempo
+        if !samplesInKeyAndTempo.isEmpty {
+            // Get up to two random samples
+            var shuffledSamples = samplesInKeyAndTempo.shuffled()
             if shuffledSamples.count > 2 {
                 shuffledSamples = Array(shuffledSamples.prefix(2))
             }
@@ -278,6 +317,7 @@ struct ContentView: View {
                 
                 // Add to UI
                 nowPlaying.append(sample)
+                print("Added sample to UI: \(sample.title) (BPM: \(sample.bpm), Key: \(sample.key))")
             }
             
             // Then load and set volumes with a delay to ensure proper initialization
@@ -302,39 +342,75 @@ struct ContentView: View {
                     }
                 }
             }
-        } else if !samplesInKey.isEmpty {
-            // If we have only one sample in this key, use it with 50% volume
-            let sample = samplesInKey[0]
+        } else {
+            print("No samples match both key and tempo, trying with just tempo")
+            // If no samples match both key and tempo, try with just tempo
+            let samplesMatchingTempo = samples.filter { abs($0.bpm - currentTempo) <= tempoTolerance }
             
-            // Set initial volume to 50% (0.5) in the UI
-            sampleVolumes[sample.id] = 0.5
-            
-            // Add to UI
-            nowPlaying.append(sample)
-            
-            // Load and set volume with a delay
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                Task {
-                    // Add the sample to play
-                    await self.audioManager.addSampleToPlay(sample)
+            if !samplesMatchingTempo.isEmpty {
+                // Get up to two random samples
+                var shuffledSamples = samplesMatchingTempo.shuffled()
+                if shuffledSamples.count > 2 {
+                    shuffledSamples = Array(shuffledSamples.prefix(2))
+                }
+                
+                // Update the key to match the first sample
+                if let firstSample = shuffledSamples.first {
+                    activeKey = firstSample.key
+                    print("Updated active key to \(firstSample.key) to match available samples")
+                }
+                
+                // First add all samples to UI
+                for sample in shuffledSamples {
+                    // Set initial volume to 50% (0.5) in the UI
+                    sampleVolumes[sample.id] = 0.5
                     
-                    // Force volume to 50% with multiple attempts
-                    self.audioManager.setVolume(for: sample, volume: 0.5)
-                    print("Initial set volume for \(sample.title) to 0.5")
-                    
-                    // Try again after a short delay
-                    try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
-                    self.audioManager.setVolume(for: sample, volume: 0.5)
-                    print("Second attempt set volume for \(sample.title) to 0.5")
-                    
-                    // Notify observers
-                    self.audioManager.objectWillChange.send()
+                    // Add to UI
+                    nowPlaying.append(sample)
+                    print("Added sample to UI: \(sample.title) (BPM: \(sample.bpm), Key: \(sample.key))")
+                }
+                
+                // Then load and set volumes with a delay
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    for sample in shuffledSamples {
+                        // Handle audio setup
+                        Task {
+                            // Add the sample to play
+                            await self.audioManager.addSampleToPlay(sample)
+                            
+                            // Force volume to 50% with multiple attempts
+                            self.audioManager.setVolume(for: sample, volume: 0.5)
+                            print("Initial set volume for \(sample.title) to 0.5")
+                            
+                            // Try again after a short delay
+                            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                            self.audioManager.setVolume(for: sample, volume: 0.5)
+                            print("Second attempt set volume for \(sample.title) to 0.5")
+                            
+                            // Notify observers
+                            self.audioManager.objectWillChange.send()
+                        }
+                    }
+                }
+            } else {
+                // If no samples match the tempo at all, try a different tempo
+                print("No samples match the selected tempo at all, trying a different tempo")
+                for tempo in tempoOptions {
+                    if tempo != currentTempo {
+                        let matchingSamples = samples.filter { abs($0.bpm - tempo) <= tempoTolerance }
+                        if !matchingSamples.isEmpty {
+                            // Update tempo
+                            activeBPM = tempo
+                            audioManager.updateBPM(to: tempo)
+                            print("Switching to tempo \(tempo) BPM which has matching samples")
+                            
+                            // Try loading samples again with the new tempo
+                            loadRandomSamples()
+                            return
+                        }
+                    }
                 }
             }
-        } else {
-            // If no samples in the selected key, try a different key
-            activeKey = MusicKey.allCases.randomElement()
-            loadRandomSamples() // Try again with new key
         }
     }
 
