@@ -435,8 +435,12 @@ jobs:
         echo "Creating cross-platform ColorExtensions..."
         cat > ColorExtensions.swift << 'EOF'
         import SwiftUI
+
+        #if os(iOS)
         import UIKit
+        #elseif os(macOS)
         import AppKit
+        #endif
 
         extension Color {
             #if os(iOS)
