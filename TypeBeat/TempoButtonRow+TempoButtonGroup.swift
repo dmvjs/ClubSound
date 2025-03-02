@@ -3,19 +3,17 @@ import SwiftUI
 struct TempoButtonGroup: View {
     @ObservedObject var audioManager: AudioManager
     let buttonSize: CGFloat
+    var onTempoSelected: (Double) -> Void
     
     var body: some View {
         ForEach([69, 84, 94, 102], id: \.self) { bpm in
             Button(action: {
-                // Ensure BPM updates happen on main thread
-                DispatchQueue.main.async {
-                    // Update BPM without stopping playback
-                    audioManager.updateBPM(to: Double(bpm))
-                    
-                    // Provide haptic feedback
-                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                    generator.impactOccurred()
-                }
+                // Call the provided callback instead of directly updating BPM
+                onTempoSelected(Double(bpm))
+                
+                // Provide haptic feedback
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.impactOccurred()
             }) {
                 bpmButtonLabel(for: bpm)
             }

@@ -6,6 +6,9 @@ struct TempoButtonRow: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingLanguageSelection = false
     @State private var breatheScale: CGFloat = 1.0
+    var onTempoSelected: (Double) -> Void
+    @Binding var pendingTempoChange: Bool
+    @Binding var pendingTempoChangeProgress: CGFloat
     
     // Adjusted constants for better layout
     private let maxButtonSize: CGFloat = 56
@@ -30,7 +33,8 @@ struct TempoButtonRow: View {
                 
                 TempoButtonGroup(
                     audioManager: audioManager,
-                    buttonSize: buttonSize
+                    buttonSize: buttonSize,
+                    onTempoSelected: onTempoSelected
                 )
             }
             .frame(maxWidth: .infinity, alignment: .leading)

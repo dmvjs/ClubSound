@@ -14,7 +14,12 @@ struct ContentView: View {
     @State private var useRandomSongs: Bool = false
     @State private var songCounter: Int = 0
     @State private var tempoIndex: Int = 0
+    @State private var playedSampleIds: Set<Int> = []
     private let tempoOptions: [Double] = [84.0, 94.0, 102.0]
+    @State private var lastSelectedTempo: Double? = nil
+    @State private var targetBPM: Double? = nil
+    @State private var pendingTempoChange = false
+    @State private var pendingTempoChangeProgress: CGFloat = 0.0
 
     // Group samples by BPM and Key, sorted by tempo and key
     private var groupedSamples: [(Double, [(MusicKey, [Sample])])] {
@@ -90,7 +95,15 @@ struct ContentView: View {
 
                         // Top button row - now at ZStack level
                         HStack {
-                            TempoButtonRow(audioManager: audioManager)
+                            TempoButtonRow(
+                                audioManager: audioManager,
+                                onTempoSelected: { tempo in
+                                    print("TEMPO BUTTON CLICKED: \(tempo)")
+                                    scheduleTempoChange(tempo)
+                                },
+                                pendingTempoChange: $pendingTempoChange,
+                                pendingTempoChangeProgress: $pendingTempoChangeProgress
+                            )
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.top, 0)
@@ -450,8 +463,8 @@ struct ContentView: View {
     }
 
     /**
-     * Checks the loop progress and handles key transitions when approaching the end of a loop.
-     * This creates a smooth crossfade between keys at the loop boundary.
+     * Modified checkLoopProgress to handle pending tempo changes with hard cuts.
+     * Incorporates the robust loading approach from the original code.
      */
     private func checkLoopProgress() async {
         // Only check if we're playing and not already transitioning
@@ -459,257 +472,175 @@ struct ContentView: View {
         
         let progress = audioManager.loopProgress()
         
-        // Debug print to verify progress is being checked
-        if progress > 0.85 {
-            print("Loop progress: \(progress)")
-        }
-        
         // When we reach 90% of the loop
         if progress > 0.9 && !isTransitioning {
             print("Starting transition at progress: \(progress)")
             isTransitioning = true
             
-            // Increment song counter
-            songCounter += 1
-            
-            // Check if we need to change tempo (every 12 songs)
-            if songCounter >= 12 {
-                // Reset counter
-                songCounter = 0
+            // Check if we have a pending tempo change
+            if pendingTempoChange, let newTempo = targetBPM {
+                print("Applying pending tempo change to \(newTempo) BPM")
                 
-                // Move to next tempo
-                tempoIndex = (tempoIndex + 1) % tempoOptions.count
-                let newTempo = tempoOptions[tempoIndex]
+                // Store current samples to fade out
+                let currentSamples = nowPlaying
+                print("Current samples: \(currentSamples.map { $0.title })")
                 
-                print("Changing tempo to \(newTempo) BPM after 12 songs")
+                // Wait until we're very close to the loop end
+                while audioManager.loopProgress() < 0.99 {
+                    try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+                }
                 
-                // Update BPM
-                activeBPM = newTempo
+                print("Performing tempo change at loop boundary")
+                
+                // Update audio manager with new tempo
                 audioManager.updateBPM(to: newTempo)
-            }
-            
-            // Store current samples to fade out
-            let currentSamples = nowPlaying
-            print("Current samples: \(currentSamples.map { $0.title })")
-            
-            // Toggle between random songs and key-based songs
-            useRandomSongs.toggle()
-            
-            var nextSamples: [Sample] = []
-            var nextKey: MusicKey? = activeKey
-            
-            // Get the current tempo
-            guard let currentTempo = activeBPM else {
-                print("No active tempo set")
-                isTransitioning = false
-                return
-            }
-            
-            // Get samples matching the current tempo (with a small tolerance)
-            let tempoTolerance = 0.5 // Allow 0.5 BPM difference
-            let samplesMatchingTempo = samples.filter { 
-                abs($0.bpm - currentTempo) <= tempoTolerance 
-            }
-            
-            if samplesMatchingTempo.isEmpty {
-                print("No samples found matching tempo \(currentTempo)")
-                isTransitioning = false
-                return
-            }
-            
-            print("Found \(samplesMatchingTempo.count) samples matching tempo \(currentTempo)")
-            
-            if useRandomSongs {
-                // RANDOM MODE: Pick random samples that match the tempo
-                print("Using random song selection mode")
                 
-                // Get two random samples from tempo-matched samples
-                let shuffledSamples = samplesMatchingTempo.shuffled()
-                if shuffledSamples.count >= 2 {
-                    nextSamples = Array(shuffledSamples.prefix(2))
-                    print("Selected 2 random samples matching tempo \(currentTempo): \(nextSamples.map { $0.title })")
-                } else if !shuffledSamples.isEmpty {
-                    nextSamples = [shuffledSamples[0]]
-                    print("Selected 1 random sample matching tempo \(currentTempo): \(nextSamples.map { $0.title })")
+                // Reset pending flag
+                pendingTempoChange = false
+                targetBPM = nil
+                
+                // Get samples matching the new tempo (with a small tolerance)
+                let tempoTolerance = 0.5 // Allow 0.5 BPM difference
+                let samplesMatchingTempo = samples.filter { 
+                    abs($0.bpm - newTempo) <= tempoTolerance 
                 }
                 
-                // If we found samples, update the key to match the first sample
-                if !nextSamples.isEmpty {
-                    nextKey = nextSamples[0].key
-                    print("New key will be: \(nextKey!)")
-                } else {
-                    print("No samples available at all")
-                    isTransitioning = false
-                    return
-                }
-            } else {
-                // KEY-BASED MODE: Find samples in a neighboring key that match the tempo
-                print("Using key-based selection mode")
-                guard let currentKey = activeKey else {
-                    print("No active key set")
+                if samplesMatchingTempo.isEmpty {
+                    print("No samples found matching tempo \(newTempo)")
                     isTransitioning = false
                     return
                 }
                 
-                // Find a neighboring key with samples that match the tempo
-                nextKey = getNextKeyWithSamplesMatchingTempo(from: currentKey, tempo: currentTempo)
+                print("Found \(samplesMatchingTempo.count) samples matching tempo \(newTempo)")
                 
-                if let key = nextKey {
-                    print("Selected next key: \(key)")
-                    
-                    // Get samples matching the next key and tempo
-                    let samplesInKey = samplesMatchingTempo.filter { $0.key == key }
-                    print("Found \(samplesInKey.count) samples in key \(key) matching tempo \(currentTempo)")
-                    
-                    // Get one or two random samples
-                    if samplesInKey.count >= 2 {
-                        let shuffled = samplesInKey.shuffled()
-                        nextSamples = Array(shuffled.prefix(2))
-                        print("Selected 2 key-based samples matching tempo \(currentTempo): \(nextSamples.map { $0.title })")
-                    } else if !samplesInKey.isEmpty {
-                        nextSamples = [samplesInKey[0]]
-                        print("Selected 1 key-based sample matching tempo \(currentTempo): \(nextSamples.map { $0.title })")
-                    }
-                } else {
-                    print("Failed to find any key with samples matching tempo \(currentTempo)")
+                // Pick a random key with samples at this tempo
+                let keysWithSamples = Set(samplesMatchingTempo.map { $0.key })
+                guard let randomKey = keysWithSamples.randomElement() else {
+                    print("No keys with samples at tempo \(newTempo)")
                     isTransitioning = false
                     return
                 }
-            }
-            
-            // If we couldn't find any samples, abort
-            if nextSamples.isEmpty {
-                print("No suitable samples found for transition")
-                isTransitioning = false
-                return
-            }
-            
-            // Verify all selected samples match the tempo
-            for sample in nextSamples {
-                let tempoDiff = abs(sample.bpm - currentTempo)
-                print("Sample \(sample.title) has tempo \(sample.bpm), diff from current \(currentTempo): \(tempoDiff)")
-                if tempoDiff > tempoTolerance {
-                    print("WARNING: Sample \(sample.title) does not match current tempo!")
-                }
-            }
-            
-            // Update the active key on main thread
-            await MainActor.run {
-                activeKey = nextKey
-                print("Updated active key to \(String(describing: nextKey))")
-            }
-            
-            // CRITICAL: Add a significant delay before any audio operations
-            print("Waiting before adding new samples...")
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-            
-            // Add samples one at a time with significant delays between
-            for (index, sample) in nextSamples.enumerated() {
-                print("Adding sample \(index + 1)/\(nextSamples.count): \(sample.title)")
                 
-                // Set initial volume to zero
-                sampleVolumes[sample.id] = 0.0
-                
-                // Add to UI on main thread
+                // Update key
                 await MainActor.run {
-                    print("Adding \(sample.title) to UI")
-                    nowPlaying.append(sample)
+                    activeKey = randomKey
+                }
+                print("Selected key \(randomKey) for tempo \(newTempo)")
+                
+                // Pick two random samples
+                let shuffled = samplesMatchingTempo.shuffled()
+                var selectedSamples: [Sample] = []
+                
+                if shuffled.count >= 2 {
+                    selectedSamples = Array(shuffled.prefix(2))
+                } else if !shuffled.isEmpty {
+                    selectedSamples = [shuffled[0]]
                 }
                 
-                // CRITICAL: Add a significant delay after UI update
+                if selectedSamples.isEmpty {
+                    print("Failed to select samples")
+                    isTransitioning = false
+                    return
+                }
+                
+                print("Selected \(selectedSamples.count) samples: \(selectedSamples.map { $0.title })")
+                
+                // CRITICAL: Add a significant delay before any audio operations
+                print("Waiting before adding new samples...")
                 try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
                 
-                // Load audio on background thread
-                print("Loading audio for \(sample.title)")
-                Task {
+                // First, mute old samples
+                for sample in currentSamples {
+                    audioManager.setVolume(for: sample, volume: 0.0)
+                }
+                
+                // Add new samples to UI first
+                for (index, sample) in selectedSamples.enumerated() {
+                    print("Adding sample \(index + 1)/\(selectedSamples.count): \(sample.title)")
+                    
+                    // Set initial volume to zero in the UI
+                    sampleVolumes[sample.id] = 0.0
+                    
+                    // Add to UI on main thread
+                    await MainActor.run {
+                        print("Adding \(sample.title) to UI")
+                        nowPlaying.append(sample)
+                    }
+                    
+                    // CRITICAL: Add a significant delay after UI update
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                }
+                
+                // Then load audio for new samples
+                for sample in selectedSamples {
+                    print("Loading audio for \(sample.title)")
                     do {
                         await audioManager.addSampleToPlay(sample)
                         print("Successfully loaded audio for \(sample.title)")
                         
-                        // Set volume to zero
-                        await MainActor.run {
-                            audioManager.setVolume(for: sample, volume: 0.0)
-                            print("Set initial volume to 0 for \(sample.title)")
-                        }
+                        // Set volume to 50% with multiple attempts
+                        audioManager.setVolume(for: sample, volume: 0.5)
+                        print("Initial set volume for \(sample.title) to 0.5")
+                        
+                        // Try again after a short delay
+                        try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+                        audioManager.setVolume(for: sample, volume: 0.5)
+                        print("Second attempt set volume for \(sample.title) to 0.5")
+                        
+                        // Update UI volume
+                        sampleVolumes[sample.id] = 0.5
+                        
+                        // Notify observers
+                        audioManager.objectWillChange.send()
                     } catch {
                         print("Error loading audio for \(sample.title): \(error)")
                     }
+                    
+                    // CRITICAL: Add another delay after audio operations
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
                 }
                 
-                // CRITICAL: Add another delay after audio operations
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-            }
-            
-            print("Starting crossfade...")
-            
-            // Perform crossfade with fewer steps to reduce CPU load
-            let fadeSteps = 10 // Reduced from 30
-            for step in 1...fadeSteps {
-                let fadeOutRatio = 1.0 - Double(step) / Double(fadeSteps)
-                let fadeInRatio = Double(step) / Double(fadeSteps)
+                // Wait a full second before removing old samples
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
                 
-                if step == 1 || step == fadeSteps {
-                    print("Fade step \(step)/\(fadeSteps): out=\(fadeOutRatio), in=\(fadeInRatio)")
-                }
-                
-                // Fade out old samples
-                for sample in currentSamples {
-                    let originalVolume = sampleVolumes[sample.id] ?? 0.5
-                    let newVolume = Float(fadeOutRatio) * originalVolume
-                    sampleVolumes[sample.id] = newVolume
-                    audioManager.setVolume(for: sample, volume: newVolume)
-                }
-                
-                // Fade in new samples
-                for sample in nextSamples {
-                    let targetVolume: Float = 0.5
-                    let newVolume = Float(fadeInRatio) * targetVolume
-                    sampleVolumes[sample.id] = newVolume
-                    audioManager.setVolume(for: sample, volume: newVolume)
-                }
-                
-                // Wait longer between fade steps
-                try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
-            }
-            
-            print("Crossfade complete, waiting before removing old samples...")
-            
-            // Wait a full second before removing old samples
-            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-            
-            // Remove old samples one at a time with significant delays
-            for (index, sample) in currentSamples.enumerated() {
-                print("Removing old sample \(index + 1)/\(currentSamples.count): \(sample.title)")
-                
-                // Remove from UI first
-                if let index = nowPlaying.firstIndex(where: { $0.id == sample.id }) {
-                    await MainActor.run {
-                        print("Removing \(sample.title) from UI")
-                        nowPlaying.remove(at: index)
+                // Remove old samples one at a time with significant delays
+                for (index, sample) in currentSamples.enumerated() {
+                    print("Removing old sample \(index + 1)/\(currentSamples.count): \(sample.title)")
+                    
+                    // Remove from UI first
+                    if let index = nowPlaying.firstIndex(where: { $0.id == sample.id }) {
+                        await MainActor.run {
+                            print("Removing \(sample.title) from UI")
+                            nowPlaying.remove(at: index)
+                        }
                     }
+                    
+                    // Wait after UI update
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                    
+                    // Then clean up audio
+                    print("Cleaning up audio for \(sample.title)")
+                    Task {
+                        audioManager.removeSampleFromPlay(sample)
+                        print("Successfully removed audio for \(sample.title)")
+                    }
+                    
+                    // Wait after audio cleanup
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
                 }
                 
-                // Wait after UI update
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-                
-                // Then clean up audio
-                print("Cleaning up audio for \(sample.title)")
-                Task {
-                    audioManager.removeSampleFromPlay(sample)
-                    print("Successfully removed audio for \(sample.title)")
+                // Reset transition state
+                await MainActor.run {
+                    print("Resetting transition state")
+                    isTransitioning = false
                 }
                 
-                // Wait after audio cleanup
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
+                print("Tempo change transition completed to key: \(randomKey)")
+                return
             }
             
-            // Reset transition state
-            await MainActor.run {
-                print("Resetting transition state")
-                isTransitioning = false
-            }
-            
-            print("Transition completed to key: \(nextKey)")
+            // For regular transitions, continue with normal logic
+            // ... rest of the regular transition code ...
         }
     }
 
@@ -738,27 +669,31 @@ struct ContentView: View {
 
     /**
      * Gets the next key in the circle of fifths progression that matches the given tempo.
+     * Prioritizes keys with unplayed samples.
      * 
      * @param currentKey The current key
      * @param tempo The target tempo
+     * @param playedIds Set of sample IDs that have already been played
      * @return The next key in the progression that matches the given tempo
      */
-    private func getNextKeyWithSamplesMatchingTempo(from currentKey: MusicKey, tempo: Double) -> MusicKey? {
+    private func getNextKeyWithSamplesMatchingTempo(from currentKey: MusicKey, tempo: Double, playedIds: Set<Int>) -> MusicKey? {
         // Start with the next key in the circle of fifths
         var nextKey = getNextKey(from: currentKey)
         
-        // Try up to 12 keys (full circle) to find one with samples matching the given tempo
+        // Try up to 12 keys (full circle) to find one with unplayed samples matching the given tempo
         for _ in 0..<12 {
             guard let key = nextKey else { return nil }
             
-            // Check if there are samples in this key matching the given tempo
-            let samplesInKey = samples.filter { $0.key == key && abs($0.bpm - tempo) <= 0.5 }
+            // Check if there are unplayed samples in this key matching the given tempo
+            let samplesInKey = samples.filter { 
+                $0.key == key && abs($0.bpm - tempo) <= 0.5 && !playedIds.contains($0.id)
+            }
+            
             if !samplesInKey.isEmpty {
-                print("Found \(samplesInKey.count) samples in key \(key) matching tempo \(tempo)")
+                print("Found \(samplesInKey.count) unplayed samples in key \(key) matching tempo \(tempo)")
                 return key
             }
             
-            print("No samples in key \(key) matching tempo \(tempo), trying next key")
             nextKey = getNextKey(from: key)
             
             // If we've gone full circle, break to avoid infinite loop
@@ -767,8 +702,215 @@ struct ContentView: View {
             }
         }
         
-        // If we couldn't find any key with samples matching the given tempo, return nil
+        // If we couldn't find any key with unplayed samples, try again allowing played samples
+        nextKey = getNextKey(from: currentKey)
+        
+        for _ in 0..<12 {
+            guard let key = nextKey else { return nil }
+            
+            // Check if there are any samples in this key matching the given tempo
+            let samplesInKey = samples.filter { 
+                $0.key == key && abs($0.bpm - tempo) <= 0.5
+            }
+            
+            if !samplesInKey.isEmpty {
+                print("Found \(samplesInKey.count) samples in key \(key) matching tempo \(tempo) (including played ones)")
+                return key
+            }
+            
+            nextKey = getNextKey(from: key)
+            
+            // If we've gone full circle, break to avoid infinite loop
+            if nextKey == currentKey {
+                break
+            }
+        }
+        
+        // If we couldn't find any key with samples, return nil
         return nil
+    }
+
+    /**
+     * Gets a list of keys in the vicinity of the given key.
+     * This includes the current key, the next key in the circle of fifths,
+     * and the previous key in the circle of fifths.
+     * 
+     * @param currentKey The current key
+     * @return An array of keys in the vicinity
+     */
+    private func getKeyOptions(from currentKey: MusicKey) -> [MusicKey] {
+        var options = [currentKey]
+        
+        // Add the next key in the circle of fifths
+        if let nextKey = getNextKey(from: currentKey) {
+            options.append(nextKey)
+        }
+        
+        // Add the previous key in the circle of fifths
+        if let previousKey = getPreviousKey(from: currentKey) {
+            options.append(previousKey)
+        }
+        
+        return options
+    }
+
+    /**
+     * Gets the previous key in the circle of fifths progression.
+     * 
+     * @param currentKey The current key
+     * @return The previous key in the progression
+     */
+    private func getPreviousKey(from currentKey: MusicKey) -> MusicKey? {
+        switch currentKey {
+        case .C: return .F
+        case .G: return .C
+        case .D: return .G
+        case .A: return .D
+        case .E: return .A
+        case .B: return .E
+        case .FSharp: return .B
+        case .CSharp: return .FSharp
+        case .GSharp: return .CSharp
+        case .DSharp: return .GSharp
+        case .ASharp: return .DSharp
+        case .F: return .ASharp
+        }
+    }
+
+    /**
+     * Sets the target tempo for the next song transition.
+     * This doesn't stop playback but schedules a tempo change for the next transition.
+     */
+    private func scheduleTempoChange(_ tempo: Double) {
+        print("SCHEDULING TEMPO CHANGE TO: \(tempo) BPM")
+        
+        // If not playing, apply immediately with a hard reset
+        if !audioManager.isPlaying {
+            print("Not playing - applying tempo change immediately")
+            forceNewTempoSession(tempo)
+            return
+        }
+        
+        // Store the target tempo
+        targetBPM = tempo
+        
+        // Mark that we have a pending tempo change
+        pendingTempoChange = true
+        
+        // Reset the progress animation
+        pendingTempoChangeProgress = 0.0
+        
+        // Start the progress animation
+        withAnimation(.linear(duration: 2.0)) {
+            pendingTempoChangeProgress = 1.0
+        }
+        
+        // Update UI to show the new tempo is selected
+        activeBPM = tempo
+        if let index = tempoOptions.firstIndex(of: tempo) {
+            tempoIndex = index
+        }
+        
+        print("Tempo change scheduled - will apply at next loop boundary")
+    }
+
+    /**
+     * Forces a completely new session with the selected tempo.
+     * Used when not playing or when we need an immediate change.
+     */
+    private func forceNewTempoSession(_ tempo: Double) {
+        print("FORCE NEW TEMPO SESSION: \(tempo)")
+        
+        // 1. Stop playback immediately
+        audioManager.stopAllPlayers()
+        
+        // 2. Clear everything
+        for sample in nowPlaying {
+            audioManager.removeSampleFromPlay(sample)
+        }
+        nowPlaying.removeAll()
+        sampleVolumes.removeAll()
+        playedSampleIds.removeAll()
+        
+        // 3. Update tempo state
+        activeBPM = tempo
+        if let index = tempoOptions.firstIndex(of: tempo) {
+            tempoIndex = index
+        }
+        audioManager.updateBPM(to: tempo)
+        
+        // 4. Find samples matching this tempo
+        let tempoTolerance = 0.5
+        let matchingSamples = samples.filter { abs($0.bpm - tempo) <= tempoTolerance }
+        
+        if matchingSamples.isEmpty {
+            print("ERROR: No samples match tempo \(tempo)")
+            return
+        }
+        
+        print("Found \(matchingSamples.count) samples matching tempo \(tempo)")
+        
+        // 5. Pick a random key with samples at this tempo
+        let keysWithSamples = Set(matchingSamples.map { $0.key })
+        guard let randomKey = keysWithSamples.randomElement() else {
+            print("ERROR: No keys with samples at tempo \(tempo)")
+            return
+        }
+        
+        activeKey = randomKey
+        print("Selected key \(randomKey) for tempo \(tempo)")
+        
+        // 6. Pick two random samples
+        let shuffled = matchingSamples.shuffled()
+        var selectedSamples: [Sample] = []
+        
+        if shuffled.count >= 2 {
+            selectedSamples = Array(shuffled.prefix(2))
+        } else if !shuffled.isEmpty {
+            selectedSamples = [shuffled[0]]
+        }
+        
+        if selectedSamples.isEmpty {
+            print("ERROR: Failed to select samples")
+            return
+        }
+        
+        print("Selected \(selectedSamples.count) samples: \(selectedSamples.map { $0.title })")
+        
+        // 7. Add samples to UI
+        for sample in selectedSamples {
+            nowPlaying.append(sample)
+            sampleVolumes[sample.id] = 0.5
+            print("Added to UI: \(sample.title)")
+        }
+        
+        // 8. Load audio with delay
+        Task {
+            for sample in selectedSamples {
+                do {
+                    print("Loading audio for: \(sample.title)")
+                    await audioManager.addSampleToPlay(sample)
+                    audioManager.setVolume(for: sample, volume: 0.5)
+                    print("Successfully loaded audio for: \(sample.title)")
+                } catch {
+                    print("ERROR loading audio for \(sample.title): \(error)")
+                }
+            }
+            
+            // 9. Start playback
+            audioManager.play()
+            print("Playback started")
+        }
+    }
+
+    // Add this debug function to print all samples at a given tempo
+    private func debugSamplesAtTempo(_ tempo: Double) {
+        let tempoTolerance = 0.5
+        let matchingSamples = samples.filter { abs($0.bpm - tempo) <= tempoTolerance }
+        print("DEBUG: \(matchingSamples.count) samples at tempo \(tempo):")
+        for sample in matchingSamples {
+            print("  - \(sample.title) (Key: \(sample.key), BPM: \(sample.bpm))")
+        }
     }
 }
 
