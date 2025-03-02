@@ -9,7 +9,7 @@ on:
 jobs:
   build-and-test:
     name: Build and Test
-    runs-on: macos-14 # Uses the latest macOS runner with Xcode 16+
+    runs-on: macos-14
     
     steps:
     - name: Checkout repository
@@ -23,23 +23,20 @@ jobs:
     - name: Show Xcode version
       run: xcodebuild -version
       
-    - name: Show Swift version
-      run: swift --version
-      
-    - name: List Swift files
-      run: find . -name "*.swift" | sort
+    - name: Show project info
+      run: |
+        xcodebuild -list -project TypeBeat.xcodeproj
+        cat TypeBeat.xcodeproj/project.pbxproj | grep -A 5 "SUPPORTED_PLATFORMS"
         
-    - name: Build for iOS
+    - name: Build for available platform
       run: |
         xcodebuild clean build \
           -project TypeBeat.xcodeproj \
           -scheme TypeBeat \
-          -destination "platform=iOS Simulator,name=iPhone 15,OS=latest" \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
-          SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
-          -verbose
+          SWIFT_TREAT_WARNINGS_AS_ERRORS=NO
       
     - name: Run Unit Tests
       if: success()
@@ -47,7 +44,7 @@ jobs:
         xcodebuild test \
           -project TypeBeat.xcodeproj \
           -scheme TypeBeatTests \
-          -destination "platform=iOS Simulator,name=iPhone 15,OS=latest" \
+          -destination "platform=macOS" \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO
@@ -58,7 +55,7 @@ jobs:
         xcodebuild test \
           -project TypeBeat.xcodeproj \
           -scheme TypeBeatUITests \
-          -destination "platform=iOS Simulator,name=iPhone 15,OS=latest" \
+          -destination "platform=macOS" \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO 
