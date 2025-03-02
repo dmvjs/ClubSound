@@ -1,6 +1,9 @@
-
 import Foundation
+#if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 import AVFoundation
 
 class WakeLockManager: ObservableObject {
