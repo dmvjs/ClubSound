@@ -644,6 +644,67 @@ jobs:
         }
         EOF
         
+        # Fix AudioManager
+        echo "Creating cross-platform AudioManager..."
+        cat > TypeBeat/AudioManager.swift << 'EOF'
+        import Foundation
+        import AVFoundation
+
+        class AudioManager: ObservableObject {
+            static let shared = AudioManager()
+            
+            private var audioPlayers: [UUID: AVAudioPlayer] = [:]
+            private var audioEngine = AVAudioEngine()
+            private var audioPlayerNode = AVAudioPlayerNode()
+            
+            // Instead of accessing TypeBeat.samples, we'll use the samples from AppState
+            private var samples: [Sample] = []
+            
+            init() {
+                setupAudioEngine()
+            }
+            
+            private func setupAudioEngine() {
+                audioEngine.attach(audioPlayerNode)
+                audioEngine.connect(audioPlayerNode, to: audioEngine.mainMixerNode, format: nil)
+                
+                do {
+                    try audioEngine.start()
+                } catch {
+                    print("Error starting audio engine: \(error.localizedDescription)")
+                }
+            }
+            
+            func loadSamples(from appState: AppState) {
+                self.samples = appState.samples
+            }
+            
+            func playSample(_ sample: Sample) {
+                do {
+                    let audioPlayer = try AVAudioPlayer(contentsOf: sample.url)
+                    audioPlayers[sample.id] = audioPlayer
+                    audioPlayer.play()
+                } catch {
+                    print("Error playing sample: \(error.localizedDescription)")
+                }
+            }
+            
+            func stopSample(_ sample: Sample) {
+                if let audioPlayer = audioPlayers[sample.id] {
+                    audioPlayer.stop()
+                    audioPlayers.removeValue(forKey: sample.id)
+                }
+            }
+            
+            func stopAllSamples() {
+                for (_, player) in audioPlayers {
+                    player.stop()
+                }
+                audioPlayers.removeAll()
+            }
+        }
+        EOF
+        
     - name: Create xcconfig file to override deployment targets
       run: |
         echo "Creating custom xcconfig file..."
