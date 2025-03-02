@@ -5,8 +5,8 @@ struct ContentView: View {
     @ObservedObject var audioManager: AudioManager
     @State private var sampleVolumes: [Int: Float] = [:]
     @State private var nowPlaying: [Sample] = []
-    @State private var activeBPM: Double? = 84  // Set initial BPM
-    @State private var activeKey: MusicKey? = .C  // Set initial key
+    @State private var activeBPM: Double? = nil  // Changed from fixed value to nil
+    @State private var activeKey: MusicKey? = nil  // Changed from fixed value to nil
     @StateObject private var wakeLockManager = WakeLockManager()
     @State private var mainVolume: Float = 0.69
 
@@ -93,6 +93,13 @@ struct ContentView: View {
                     .background(Color.black)
                 }
             }
+        }
+        .onAppear {
+            // Randomly select initial key and tempo
+            selectRandomKeyAndTempo()
+            
+            // Then load random samples with the selected key
+            loadRandomSamples()
         }
     }
 
@@ -201,6 +208,75 @@ struct ContentView: View {
     }
 
     private let maxButtonSize: CGFloat = 44
+
+    /**
+     * Selects a random key and tempo for initial app state.
+     * This provides variety each time the app is launched.
+     */
+    private func selectRandomKeyAndTempo() {
+        // Get all available keys and tempos from samples
+        let allKeys = Set(samples.map { $0.key })
+        let allTempos = Set(samples.map { $0.bpm })
+        
+        // Select random key and tempo if available
+        if let randomKey = allKeys.randomElement() {
+            activeKey = randomKey
+        } else {
+            // Fallback to C if no samples available
+            activeKey = .C
+        }
+        
+        // Select a random tempo from common values or from available samples
+        let commonTempos = [69.0, 84.0, 94.0, 102.0, 120.0, 128.0]
+        
+        if !allTempos.isEmpty {
+            // Prefer to use a tempo from actual samples
+            activeBPM = allTempos.randomElement()
+        } else if !commonTempos.isEmpty {
+            // Fallback to common tempos
+            activeBPM = commonTempos.randomElement()
+        } else {
+            // Ultimate fallback
+            activeBPM = 84.0
+        }
+        
+        // Update the audio manager with the selected tempo
+        if let tempo = activeBPM {
+            audioManager.updateBPM(to: tempo)
+        }
+    }
+    
+    /**
+     * Loads two random samples of the selected key.
+     * This populates the initial playback queue.
+     */
+    private func loadRandomSamples() {
+        guard let currentKey = activeKey else { return }
+        
+        // Get samples matching the selected key
+        let samplesInKey = samples.filter { $0.key == currentKey }
+        
+        // If we have at least 2 samples in this key
+        if samplesInKey.count >= 2 {
+            // Get two random samples
+            var shuffledSamples = samplesInKey.shuffled()
+            if shuffledSamples.count > 2 {
+                shuffledSamples = Array(shuffledSamples.prefix(2))
+            }
+            
+            // Add the samples to nowPlaying
+            for sample in shuffledSamples {
+                addToNowPlaying(sample: sample)
+            }
+        } else if !samplesInKey.isEmpty {
+            // If we have only one sample in this key, use it
+            addToNowPlaying(sample: samplesInKey[0])
+        } else {
+            // If no samples in the selected key, try a different key
+            activeKey = MusicKey.allCases.randomElement()
+            loadRandomSamples() // Try again with new key
+        }
+    }
 }
 
 #Preview {
