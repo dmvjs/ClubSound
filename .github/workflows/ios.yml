@@ -284,61 +284,47 @@ jobs:
         #endif
         EOF
         
-        # Fix TempoButtonRow+ControlButtonGroup
-        echo "Patching TempoButtonRow+ControlButtonGroup..."
-        cat > TypeBeat/TempoButtonRow+ControlButtonGroup.swift << 'EOF'
+        # Fix TempoButtonRow
+        echo "Creating cross-platform TempoButtonRow..."
+        cat > TypeBeat/TempoButtonRow.swift << 'EOF'
         import SwiftUI
 
-        struct ControlButtonGroup: View {
-            @ObservedObject var wakeLockManager: WakeLockManager
-            var onPlayPause: () -> Void
-            var onStop: () -> Void
-            var isPlaying: Bool
+        struct TempoButtonRow: View {
+            @EnvironmentObject var appState: AppState
+            @StateObject private var wakeLockManager = WakeLockManager()
+            
+            func increaseTempo() {
+                if appState.currentBPM < 200 {
+                    appState.currentBPM += 1
+                }
+            }
+            
+            func decreaseTempo() {
+                if appState.currentBPM > 60 {
+                    appState.currentBPM -= 1
+                }
+            }
             
             var body: some View {
-                HStack(spacing: 20) {
-                    Button(action: {
-                        onStop()
-                        #if os(iOS)
-                        HapticFeedback.mediumImpact()
-                        #endif
-                    }) {
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.white)
-                            .frame(width: 60, height: 60)
-                            .background(Color.red)
-                            .clipShape(Circle())
-                    }
+                HStack(spacing: 30) {
+                    TempoButtonGroup(
+                        currentBPM: $appState.currentBPM,
+                        onIncrease: increaseTempo,
+                        onDecrease: decreaseTempo
+                    )
                     
-                    Button(action: {
-                        onPlayPause()
-                        #if os(iOS)
-                        HapticFeedback.mediumImpact()
-                        #endif
-                    }) {
-                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.white)
-                            .frame(width: 60, height: 60)
-                            .background(Color.green)
-                            .clipShape(Circle())
-                    }
+                    Spacer()
                     
-                    Button(action: {
-                        wakeLockManager.toggleWakeLock()
-                        #if os(iOS)
-                        HapticFeedback.mediumImpact()
-                        #endif
-                    }) {
-                        Image(systemName: wakeLockManager.isWakeLockEnabled ? "bolt.fill" : "bolt.slash")
-                            .font(.system(size: 24))
-                            .foregroundColor(.white)
-                            .frame(width: 60, height: 60)
-                            .background(Color.blue)
-                            .clipShape(Circle())
-                    }
+                    ControlButtonGroup(
+                        wakeLockManager: wakeLockManager,
+                        onPlayPause: { appState.isPlaying.toggle() },
+                        onStop: { appState.isPlaying = false },
+                        isPlaying: appState.isPlaying
+                    )
                 }
+                .padding()
+                .background(Color.darkGray.opacity(0.2))
+                .cornerRadius(10)
             }
         }
         EOF
