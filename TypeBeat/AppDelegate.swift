@@ -5,8 +5,11 @@
 //  Created by Kirk Elliott on 12/6/24.
 //
 
-
+#if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
