@@ -261,24 +261,25 @@ jobs:
         #endif
         EOF
         
-        # Create a cross-platform haptic feedback utility
+        # Create HapticFeedback utility
         echo "Creating cross-platform HapticFeedback..."
         cat > TypeBeat/HapticFeedback.swift << 'EOF'
         import Foundation
-        
+
         #if os(iOS)
         import UIKit
-        
+
         struct HapticFeedback {
             static func mediumImpact() {
                 let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.prepare()
                 generator.impactOccurred()
             }
         }
-        #elseif os(macOS)
+        #else
         struct HapticFeedback {
             static func mediumImpact() {
-                // No haptic feedback on macOS
+                // No-op on non-iOS platforms
             }
         }
         #endif
@@ -342,8 +343,13 @@ jobs:
                 NavigationView {
                     ScrollView {
                         LazyVStack(spacing: 10) {
-                            ForEach(appState.samples) { sample in
-                                SampleRow(sample: sample)
+                            ForEach($appState.samples) { $sample in
+                                SampleRow(
+                                    sample: sample,
+                                    isInPlaylist: appState.isSampleInNowPlaying(sample),
+                                    addToNowPlaying: { appState.addSampleToNowPlaying($0) },
+                                    removeFromNowPlaying: { appState.removeSampleFromNowPlaying($0) }
+                                )
                             }
                             
                             Button(action: {
@@ -534,6 +540,90 @@ jobs:
                             .foregroundColor(.green)
                     }
                 }
+            }
+        }
+        EOF
+        
+        # Fix AppState
+        echo "Creating cross-platform AppState..."
+        cat > TypeBeat/AppState.swift << 'EOF'
+        import Foundation
+        import Combine
+        import SwiftUI
+
+        class AppState: ObservableObject {
+            @Published var samples: [Sample] = []
+            @Published var nowPlaying: [Sample] = []
+            @Published var isPlaying: Bool = false
+            @Published var currentBPM: Int = 120
+            @Published var currentKey: MusicKey = .C
+            
+            // Add any other properties and methods needed
+            
+            func addSampleToNowPlaying(_ sample: Sample) {
+                if !nowPlaying.contains(where: { $0.id == sample.id }) {
+                    nowPlaying.append(sample)
+                }
+            }
+            
+            func removeSampleFromNowPlaying(_ sample: Sample) {
+                nowPlaying.removeAll(where: { $0.id == sample.id })
+            }
+            
+            func isSampleInNowPlaying(_ sample: Sample) -> Bool {
+                return nowPlaying.contains(where: { $0.id == sample.id })
+            }
+        }
+        EOF
+        
+        # Fix SampleRow
+        echo "Creating cross-platform SampleRow..."
+        cat > TypeBeat/SampleRow.swift << 'EOF'
+        import SwiftUI
+
+        struct SampleRow: View {
+            let sample: Sample
+            let isInPlaylist: Bool
+            let addToNowPlaying: (Sample) -> Void
+            let removeFromNowPlaying: (Sample) -> Void
+            
+            var body: some View {
+                HStack {
+                    Text(sample.name)
+                        .font(.headline)
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        if isInPlaylist {
+                            removeFromNowPlaying(sample)
+                        } else {
+                            addToNowPlaying(sample)
+                            #if os(iOS)
+                            HapticFeedback.mediumImpact()
+                            #endif
+                        }
+                    }) {
+                        Image(systemName: isInPlaylist ? "minus.circle" : "plus.circle")
+                            .foregroundColor(isInPlaylist ? .red : .green)
+                            .font(.title2)
+                    }
+                }
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(10)
+            }
+        }
+        EOF
+        
+        # Add String extension for localization
+        echo "Creating String extension for localization..."
+        cat > TypeBeat/String+Localization.swift << 'EOF'
+        import Foundation
+
+        extension String {
+            var localized: String {
+                return NSLocalizedString(self, comment: "")
             }
         }
         EOF
