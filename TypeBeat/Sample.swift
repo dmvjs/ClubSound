@@ -15,9 +15,9 @@ struct Sample: Identifiable {
     let key: MusicKey
     let bpm: Double
     let fileName: String
-    
+
     var title: String { _title }
-    
+
     init(id: Int, title: String, key: MusicKey, bpm: Double, fileName: String) {
         self.id = id
         self._title = title
@@ -25,7 +25,7 @@ struct Sample: Identifiable {
         self.bpm = bpm
         self.fileName = fileName
     }
-    
+
     func keyColor() -> Color {
         let subduedColors: [MusicKey: Color] = [
             .C: Color(red: 0.20, green: 0.20, blue: 0.50),
@@ -282,7 +282,6 @@ let samples: [Sample] = [
     Sample(id: 290, title: "Wockesha Remix", key: .G, bpm: 84, fileName: "00000290-body"),
     Sample(id: 291, title: "Make Em Say Uhhh", key: .D, bpm: 84, fileName: "00000291-body"),
     Sample(id: 292, title: "Sucka Stepped Up", key: .GSharp, bpm: 84, fileName: "00000292-body"),
-    Sample(id: 293, title: "1942", key: .C, bpm: 84, fileName: "00000293-body"),
     Sample(id: 294, title: "Hot Boyz", key: .FSharp, bpm: 84, fileName: "00000294-body"),
     Sample(id: 296, title: "Got Money", key: .GSharp, bpm: 84, fileName: "00000296-body"),
     Sample(id: 298, title: "Top Billin", key: .D, bpm: 94, fileName: "00000298-body"),

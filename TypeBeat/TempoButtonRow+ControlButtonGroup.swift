@@ -47,11 +47,39 @@ struct ControlButtonGroup: View {
             }
             .frame(width: buttonSize, height: buttonSize)
             .scaleEffect(audioManager.isPlaying ? 1.0 : breatheScale)
+            .animation(
+                audioManager.isPlaying ? nil : 
+                    Animation.easeInOut(duration: 1.2)
+                        .repeatForever(autoreverses: true)
+                        .speed(0.5),
+                value: breatheScale
+            )
             .shadow(color: .black.opacity(0.3), radius: 7, x: 0, y: 4)
         }
         .accessibilityLabel(audioManager.isPlaying ? "stop".localized : "play".localized)
         .accessibilityIdentifier("play-button")
-        .animation(.easeInOut, value: audioManager.isPlaying)
+        .onAppear {
+            // Start the breathing animation when not playing
+            if !audioManager.isPlaying {
+                startBreathingAnimation()
+            }
+        }
+        .onChange(of: audioManager.isPlaying) { isPlaying in
+            if !isPlaying {
+                startBreathingAnimation()
+            }
+        }
+    }
+    
+    private func startBreathingAnimation() {
+        // Reset the scale to ensure animation starts fresh
+        breatheScale = 1.0
+        
+        // Use a slight delay to ensure the animation starts properly
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // Animate between 1.0 and 1.15 for subtle breathing effect
+            breatheScale = 1.15
+        }
     }
     
     private var pitchLockButton: some View {
