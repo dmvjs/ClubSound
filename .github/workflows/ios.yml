@@ -1355,9 +1355,22 @@ jobs:
           SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
           ONLY_ACTIVE_ARCH=YES
           
+    - name: Build for testing
+      run: |
+        xcodebuild build-for-testing \
+          -project TypeBeat.xcodeproj \
+          -scheme TypeBeat \
+          -destination "platform=macOS,arch=arm64" \
+          -xcconfig override.xcconfig \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
+          ONLY_ACTIVE_ARCH=YES
+          
     - name: Run Tests
       run: |
-        xcodebuild test \
+        xcodebuild test-without-building \
           -project TypeBeat.xcodeproj \
           -scheme TypeBeat \
           -destination "platform=macOS,arch=arm64" \
