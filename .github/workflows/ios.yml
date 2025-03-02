@@ -22,6 +22,65 @@ jobs:
         
     - name: Fix platform-specific code
       run: |
+        # Create Sample model
+        echo "Creating Sample model..."
+        cat > TypeBeat/Sample.swift << 'EOF'
+        import Foundation
+
+        struct Sample: Identifiable, Equatable {
+            let id: UUID
+            let name: String
+            let url: URL
+            
+            static func == (lhs: Sample, rhs: Sample) -> Bool {
+                return lhs.id == rhs.id
+            }
+        }
+        EOF
+        
+        # Fix SplashScreenView
+        echo "Creating cross-platform SplashScreenView..."
+        cat > TypeBeat/SplashScreenView.swift << 'EOF'
+        import SwiftUI
+
+        struct SplashScreenView: View {
+            @State private var isActive = false
+            @State private var opacity = 0.5
+            @State private var scale: CGFloat = 0.8
+            
+            var body: some View {
+                if isActive {
+                    ContentView()
+                } else {
+                    VStack {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 80))
+                            .foregroundColor(.blue)
+                        
+                        Text("ClubSound")
+                            .font(.largeTitle)
+                            .fontWeight(.bold)
+                            .padding(.top, 20)
+                    }
+                    .scaleEffect(scale)
+                    .opacity(opacity)
+                    .onAppear {
+                        withAnimation(.easeIn(duration: 1.2)) {
+                            self.opacity = 1.0
+                            self.scale = 1.0
+                        }
+                        
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            withAnimation {
+                                self.isActive = true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        EOF
+        
         # Fix AudioSettingsView
         echo "Creating cross-platform AudioSettingsView..."
         cat > TypeBeat/AudioSettingsView.swift << 'EOF'
