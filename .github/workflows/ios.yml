@@ -87,6 +87,160 @@ jobs:
         #endif
         EOF
         
+        # Fix DismissableScrollView - ensure it's properly created for macOS
+        echo "Creating cross-platform DismissableScrollView..."
+        cat > TypeBeat/DismissableScrollView.swift << 'EOF'
+        import SwiftUI
+
+        #if os(iOS)
+        import UIKit
+
+        struct DismissableScrollView<Content: View>: UIViewRepresentable {
+            var content: Content
+            var onDismiss: () -> Void
+            
+            init(@ViewBuilder content: () -> Content, onDismiss: @escaping () -> Void) {
+                self.content = content()
+                self.onDismiss = onDismiss
+            }
+            
+            func makeUIView(context: Context) -> UIScrollView {
+                let hostingController = UIHostingController(rootView: content)
+                hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+                
+                let scrollView = UIScrollView()
+                scrollView.addSubview(hostingController.view)
+                
+                NSLayoutConstraint.activate([
+                    hostingController.view.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
+                    hostingController.view.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
+                    hostingController.view.topAnchor.constraint(equalTo: scrollView.topAnchor),
+                    hostingController.view.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
+                    hostingController.view.widthAnchor.constraint(equalTo: scrollView.widthAnchor)
+                ])
+                
+                return scrollView
+            }
+            
+            func updateUIView(_ uiView: UIScrollView, context: Context) {
+                // Update if needed
+            }
+        }
+        #else
+        struct DismissableScrollView<Content: View>: View {
+            var content: Content
+            var onDismiss: () -> Void
+            
+            init(@ViewBuilder content: () -> Content, onDismiss: @escaping () -> Void) {
+                self.content = content()
+                self.onDismiss = onDismiss
+            }
+            
+            var body: some View {
+                ScrollView {
+                    content
+                }
+            }
+        }
+        #endif
+        EOF
+        
+        # Fix AudioRouteManager - ensure it's properly created for macOS
+        echo "Creating cross-platform AudioRouteManager..."
+        cat > TypeBeat/AudioRouteManager.swift << 'EOF'
+        import Foundation
+        import AVFoundation
+        import Combine
+
+        #if os(iOS)
+        import UIKit
+
+        class AudioRouteManager: ObservableObject {
+            @Published var currentOutputName: String = "Speaker"
+            @Published var isBluetoothConnected: Bool = false
+            
+            private var cancellables = Set<AnyCancellable>()
+            private var audioSession = AVAudioSession.sharedInstance()
+            
+            init() {
+                setupNotifications()
+                updateCurrentRoute()
+            }
+            
+            private func setupNotifications() {
+                NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)
+                    .sink { [weak self] _ in
+                        self?.updateCurrentRoute()
+                    }
+                    .store(in: &cancellables)
+            }
+            
+            private func updateCurrentRoute() {
+                let outputs = audioSession.currentRoute.outputs
+                if let output = outputs.first {
+                    currentOutputName = output.portName
+                    isBluetoothConnected = output.portType == .bluetoothA2DP || output.portType == .bluetoothHFP || output.portType == .bluetoothLE
+                }
+            }
+        }
+        #else
+        class AudioRouteManager: ObservableObject {
+            @Published var currentOutputName: String = "Speaker"
+            @Published var isBluetoothConnected: Bool = false
+            
+            private var cancellables = Set<AnyCancellable>()
+            
+            init() {
+                // macOS implementation would go here
+                // For now, this is a stub
+            }
+        }
+        #endif
+        EOF
+        
+        # Fix AudioOutputPicker
+        echo "Creating cross-platform AudioOutputPicker..."
+        cat > TypeBeat/AudioOutputPicker.swift << 'EOF'
+        import SwiftUI
+        import AVFoundation
+
+        #if os(iOS)
+        import MediaPlayer
+
+        struct AudioOutputPicker: UIViewRepresentable {
+            func makeUIView(context: Context) -> MPVolumeView {
+                let volumeView = MPVolumeView(frame: .zero)
+                volumeView.showsVolumeSlider = false
+                volumeView.showsRouteButton = true
+                
+                // Make only the route button visible
+                for view in volumeView.subviews {
+                    if let button = view as? UIButton {
+                        button.isHidden = false
+                    } else {
+                        view.isHidden = true
+                    }
+                }
+                
+                return volumeView
+            }
+            
+            func updateUIView(_ uiView: MPVolumeView, context: Context) {}
+        }
+        #else
+        struct AudioOutputPicker: View {
+            var body: some View {
+                Button(action: {
+                    // macOS audio output selection would go here
+                }) {
+                    Image(systemName: "airplayaudio")
+                        .font(.system(size: 20))
+                }
+            }
+        }
+        #endif
+        EOF
+        
         # Create a cross-platform haptic feedback utility
         echo "Creating cross-platform HapticFeedback..."
         cat > TypeBeat/HapticFeedback.swift << 'EOF'
@@ -101,7 +255,7 @@ jobs:
                 generator.impactOccurred()
             }
         }
-        #elseif os(macOS)
+        #else
         struct HapticFeedback {
             static func mediumImpact() {
                 // No haptic feedback on macOS
@@ -125,9 +279,7 @@ jobs:
                 HStack(spacing: 20) {
                     Button(action: {
                         onStop()
-                        #if os(iOS)
                         HapticFeedback.mediumImpact()
-                        #endif
                     }) {
                         Image(systemName: "stop.fill")
                             .font(.system(size: 24))
@@ -139,9 +291,7 @@ jobs:
                     
                     Button(action: {
                         onPlayPause()
-                        #if os(iOS)
                         HapticFeedback.mediumImpact()
-                        #endif
                     }) {
                         Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 24))
@@ -153,9 +303,7 @@ jobs:
                     
                     Button(action: {
                         wakeLockManager.toggleWakeLock()
-                        #if os(iOS)
                         HapticFeedback.mediumImpact()
-                        #endif
                     }) {
                         Image(systemName: wakeLockManager.isWakeLockEnabled ? "bolt.fill" : "bolt.slash")
                             .font(.system(size: 24))
@@ -254,6 +402,20 @@ jobs:
                     #endif
                 }
             }
+        }
+        EOF
+        
+        # Fix ColorExtensions
+        echo "Creating cross-platform ColorExtensions..."
+        cat > ColorExtensions.swift << 'EOF'
+        import SwiftUI
+
+        extension Color {
+            #if os(iOS)
+            static let darkGray = Color(UIColor.darkGray)
+            #elseif os(macOS)
+            static let darkGray = Color(NSColor.darkGray)
+            #endif
         }
         EOF
         
