@@ -6,33 +6,33 @@
 "audio_output" = "출력";
 
 // BPM
-"bpm_format" = "%d 박/분";
+"bpm_format" = "%d BPM";
 
 // Musical Keys
 "key.c" = "다";
-"key.csharp" = "다#";
+"key.csharp" = "다♯";
 "key.d" = "레";
-"key.dsharp" = "레#";
+"key.dsharp" = "레♯";
 "key.e" = "미";
 "key.f" = "파";
-"key.fsharp" = "파#";
+"key.fsharp" = "파♯";
 "key.g" = "솔";
-"key.gsharp" = "솔#";
+"key.gsharp" = "솔♯";
 "key.a" = "라";
-"key.asharp" = "라#";
+"key.asharp" = "라♯";
 "key.b" = "시";
 
 // Headers
-"header.key" = "키";
-"header.bpm" = "박/분";
+"header.key" = "조성";
+"header.bpm" = "BPM";
 
 // Section Headers
-"section.bpm" = "%d 박/분 샘플";
+"section.bpm" = "%d BPM 샘플";
 "section.key" = "%@";
 
 // Audio
 "audio.output" = "오디오 출력";
-"audio.main_volume" = "주 음량";
+"audio.main_volume" = "메인 볼륨";
 
 // Language Selection
 "language.select" = "언어 선택";
@@ -51,7 +51,7 @@
 "language.button.accessibility" = "언어 변경";
 
 // Main Volume
-"main.volume" = "주 음량";
+"main.volume" = "메인 볼륨";
 
 // Language Change
 "language.change.title" = "언어 변경 확인";

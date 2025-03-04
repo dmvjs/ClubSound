@@ -6,28 +6,28 @@
 "audio_output" = "输出";
 
 // BPM
-"bpm_format" = "%d 拍/分";
+"bpm_format" = "%d BPM";
 
 // Musical Keys
 "key.c" = "C";
-"key.csharp" = "C#";
+"key.csharp" = "C♯";
 "key.d" = "D";
-"key.dsharp" = "D#";
+"key.dsharp" = "D♯";
 "key.e" = "E";
 "key.f" = "F";
-"key.fsharp" = "F#";
+"key.fsharp" = "F♯";
 "key.g" = "G";
-"key.gsharp" = "G#";
+"key.gsharp" = "G♯";
 "key.a" = "A";
-"key.asharp" = "A#";
+"key.asharp" = "A♯";
 "key.b" = "B";
 
 // Headers
-"header.key" = "调号";
-"header.bpm" = "拍/分";
+"header.key" = "调式";
+"header.bpm" = "BPM";
 
 // Section Headers
-"section.bpm" = "%d 拍/分采样";
+"section.bpm" = "%d BPM 样本";
 "section.key" = "%@";
 
 // Audio

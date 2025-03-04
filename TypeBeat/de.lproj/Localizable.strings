@@ -1,12 +1,12 @@
 // German Localization
 "play" = "Abspielen";
 "stop" = "Stopp";
-"lock_pitch" = "Tonhöhe Sperren";
-"wake_lock" = "Wach Halten";
+"lock_pitch" = "Tonhöhe sperren";
+"wake_lock" = "Wach halten";
 "audio_output" = "Ausgang";
 
 // BPM
-"bpm_format" = "%d T/min";
+"bpm_format" = "%d BPM";
 
 // Musical Keys (German notation)
 "key.c" = "C";
@@ -24,10 +24,10 @@
 
 // Headers
 "header.key" = "Tonart";
-"header.bpm" = "T/min";
+"header.bpm" = "BPM";
 
 // Section Headers
-"section.bpm" = "%d T/min Samples";
+"section.bpm" = "%d BPM Samples";
 "section.key" = "%@";
 
 // Audio
@@ -35,7 +35,7 @@
 "audio.main_volume" = "Hauptlautstärke";
 
 // Language Selection
-"language.select" = "Sprache Auswählen";
+"language.select" = "Sprache auswählen";
 "language.english" = "English";
 "language.spanish" = "Español";
 "language.french" = "Français";
@@ -48,7 +48,7 @@
 "action.remove" = "Entfernen";
 
 // Accessibility
-"language.button.accessibility" = "Sprache Ändern";
+"language.button.accessibility" = "Sprache ändern";
 
 // Main Volume
 "main.volume" = "Hauptlautstärke";
