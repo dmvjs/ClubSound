@@ -12,11 +12,29 @@ struct ContentView: View {
 
     // Group samples by BPM and Key, sorted by tempo and key
     private var groupedSamples: [(Double, [(MusicKey, [Sample])])] {
-        let tempoGroups = Dictionary(grouping: samples) { $0.bpm }.sorted { $0.key < $1.key }
-        return tempoGroups.map { (bpm, samples) in
-            let keyGroups = Dictionary(grouping: samples) { $0.key }.sorted { $0.key.rawValue < $1.key.rawValue }
-            return (bpm, keyGroups)
+        // First, group samples by BPM
+        let tempoGroups = Dictionary(grouping: samples) { $0.bpm }
+        
+        // Convert to array of tuples and sort by BPM
+        let sortedTempoGroups = tempoGroups.map { (bpm, samples) -> (Double, [(MusicKey, [Sample])]) in
+            // For each BPM group, group samples by key
+            let keyGroups = Dictionary(grouping: samples) { $0.key }
+            
+            // Convert to array of tuples and sort by key
+            let sortedKeyGroups = keyGroups.map { (key, samples) -> (MusicKey, [Sample]) in
+                return (key, samples)
+            }.sorted { $0.0.rawValue < $1.0.rawValue }
+            
+            return (bpm, sortedKeyGroups)
+        }.sorted { $0.0 < $1.0 }
+        
+        // Debug print to verify the structure
+        for (bpm, keyGroups) in sortedTempoGroups {
+            let keys = keyGroups.map { $0.0 }
+            print("BPM \(bpm) has keys: \(keys)")
         }
+        
+        return sortedTempoGroups
     }
 
     private let minBPM: Double = 60.0

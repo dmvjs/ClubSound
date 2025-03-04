@@ -6,33 +6,33 @@
 "audio_output" = "出力";
 
 // BPM
-"bpm_format" = "%d 拍/分";
+"bpm_format" = "%d BPM";
 
 // Musical Keys
 "key.c" = "ハ";
-"key.csharp" = "ハ#";
+"key.csharp" = "ハ♯";
 "key.d" = "ニ";
-"key.dsharp" = "ニ#";
+"key.dsharp" = "ニ♯";
 "key.e" = "ホ";
 "key.f" = "ヘ";
-"key.fsharp" = "ヘ#";
+"key.fsharp" = "ヘ♯";
 "key.g" = "ト";
-"key.gsharp" = "ト#";
+"key.gsharp" = "ト♯";
 "key.a" = "イ";
-"key.asharp" = "イ#";
+"key.asharp" = "イ♯";
 "key.b" = "ロ";
 
 // Headers
 "header.key" = "調";
-"header.bpm" = "拍/分";
+"header.bpm" = "BPM";
 
 // Section Headers
-"section.bpm" = "%d 拍/分のサンプル";
+"section.bpm" = "%d BPMのサンプル";
 "section.key" = "%@";
 
 // Audio
 "audio.output" = "オーディオ出力";
-"audio.main_volume" = "主音量";
+"audio.main_volume" = "メイン音量";
 
 // Language Selection
 "language.select" = "言語を選択";

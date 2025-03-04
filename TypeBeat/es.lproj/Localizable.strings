@@ -10,16 +10,16 @@
 
 // Musical Keys
 "key.c" = "Do";
-"key.csharp" = "Do#";
+"key.csharp" = "Do♯";
 "key.d" = "Re";
-"key.dsharp" = "Re#";
+"key.dsharp" = "Re♯";
 "key.e" = "Mi";
 "key.f" = "Fa";
-"key.fsharp" = "Fa#";
+"key.fsharp" = "Fa♯";
 "key.g" = "Sol";
-"key.gsharp" = "Sol#";
+"key.gsharp" = "Sol♯";
 "key.a" = "La";
-"key.asharp" = "La#";
+"key.asharp" = "La♯";
 "key.b" = "Si";
 
 // Headers
@@ -27,7 +27,7 @@
 "header.bpm" = "PPM";
 
 // Section Headers
-"section.bpm" = "Samples a %d PPM";
+"section.bpm" = "Muestras a %d PPM";
 "section.key" = "%@";
 
 // Audio
@@ -51,7 +51,7 @@
 "language.button.accessibility" = "Cambiar Idioma";
 
 // Main Volume
-"main.volume" = "Volumen principal";
+"main.volume" = "Volumen Principal";
 
 // Language Change
 "language.change.title" = "Confirmar cambio de idioma";

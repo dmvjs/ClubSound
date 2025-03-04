@@ -10,14 +10,9 @@ enum MusicKey: String, CaseIterable, Comparable {
     case C, CSharp, D, DSharp, E, F, FSharp, G, GSharp, A, ASharp, B
     
     var localizedName: String {
-        switch self {
-        case .CSharp: return "C♯"
-        case .DSharp: return "D♯"
-        case .FSharp: return "F♯"
-        case .GSharp: return "G♯"
-        case .ASharp: return "A♯"
-        default: return rawValue
-        }
+        // Use the language manager to get localized key names
+        let localizationKey = "key.\(self.rawValue.lowercased())"
+        return LanguageManager.shared.localizedString(for: localizationKey)
     }
     
     static func < (lhs: MusicKey, rhs: MusicKey) -> Bool {

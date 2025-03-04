@@ -27,7 +27,7 @@
 "header.bpm" = "TPM";
 
 // Section Headers
-"section.bpm" = "Samples à %d TPM";
+"section.bpm" = "Échantillons à %d TPM";
 "section.key" = "%@";
 
 // Audio
@@ -51,7 +51,7 @@
 "language.button.accessibility" = "Changer de Langue";
 
 // Main Volume
-"main.volume" = "Volume principal";
+"main.volume" = "Volume Principal";
 
 // Language Change
 "language.change.title" = "Confirmer le changement de langue";

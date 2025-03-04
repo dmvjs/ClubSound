@@ -137,6 +137,46 @@ class AudioManager: ObservableObject {
         
         // Initialize the phantom reference track
         initializePhantomReference()
+        
+        // Add observer for language changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleLanguageChange),
+            name: NSNotification.Name("LanguageChanged"),
+            object: nil
+        )
+    }
+    
+    @objc private func handleLanguageChange() {
+        // Reset the audio engine completely
+        stopAllPlayers()
+        
+        // Clear all active samples
+        activeSamples.removeAll()
+        
+        // Reset all internal state
+        players.removeAll()
+        mixers.removeAll()
+        varispeedNodes.removeAll()
+        timePitchNodes.removeAll()
+        buffers.removeAll()
+        phaseCorrection.removeAll()
+        lastKnownPosition.removeAll()
+        
+        // Reset the engine
+        engine.stop()
+        
+        // Restart with a slight delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self else { return }
+            self.setupEngine()
+            self.engine.prepare()
+            try? self.engine.start()
+            self.isPlaying = false
+        }
+        
+        // Notify observers
+        objectWillChange.send()
     }
     
     private func setupAudioSession() {
