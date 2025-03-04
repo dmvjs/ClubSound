@@ -28,12 +28,6 @@ struct ContentView: View {
             return (bpm, sortedKeyGroups)
         }.sorted { $0.0 < $1.0 }
         
-        // Debug print to verify the structure
-        for (bpm, keyGroups) in sortedTempoGroups {
-            let keys = keyGroups.map { $0.0 }
-            print("BPM \(bpm) has keys: \(keys)")
-        }
-        
         return sortedTempoGroups
     }
 
