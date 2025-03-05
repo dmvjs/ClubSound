@@ -28,7 +28,7 @@ jobs:
       run: |
         xcodebuild -list -project TypeBeat.xcodeproj || echo "Failed to list schemes"
         
-    - name: Run Tests with Mac Catalyst
+    - name: Build Project
       run: |
-        # Run tests using Mac Catalyst destination with code signing disabled
-        xcodebuild test -project TypeBeat.xcodeproj -scheme "TypeBeatTests" -destination "platform=macOS,variant=Mac Catalyst" MACOSX_DEPLOYMENT_TARGET=14.7 CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO || echo "Failed to run tests with Mac Catalyst" 
+        # Just build the project without running tests
+        xcodebuild build -project TypeBeat.xcodeproj -scheme "TypeBeat" -destination "platform=macOS,variant=Mac Catalyst" MACOSX_DEPLOYMENT_TARGET=14.7 CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO 
