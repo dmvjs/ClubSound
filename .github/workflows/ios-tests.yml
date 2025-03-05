@@ -48,42 +48,102 @@ jobs:
                 init(rawValue: String) { self.rawValue = rawValue }
                 static let blankKey = LaunchOptionsKey(rawValue: "blank")
             }
-            
-            func open(_ url: URL, options: [String: Any] = [:], completionHandler: ((Bool) -> Void)? = nil) {
-                NSWorkspace.shared.open(url)
-                completionHandler?(true)
-            }
-            
-            func endEditing() {}
         }
         
         // UIScrollView compatibility
-        class MyUIScrollView: NSScrollView {
+        class UIScrollView: NSScrollView {
+            var delegate: NSObject?
             var contentOffset: CGPoint = .zero
-            var _contentSize: CGSize = .zero
-            var contentInset: NSEdgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
-            var delegate: Any?
-            var isScrollEnabled: Bool = true
-            var showsHorizontalScrollIndicator: Bool = true
-            var showsVerticalScrollIndicator: Bool = true
+            
+            // Use a computed property to avoid overriding NSScrollView's contentSize
+            private var _contentSize: CGSize = .zero
+            var contentSize: CGSize {
+                get { return _contentSize }
+                set { _contentSize = newValue }
+            }
+            
+            // Use NSEdgeInsetsZero instead of .zero
+            var contentInset: NSEdgeInsets = NSEdgeInsetsZero
             var bounces: Bool = true
             var alwaysBounceVertical: Bool = false
-            var alwaysBounceHorizontal: Bool = false
-            var isPagingEnabled: Bool = false
-            var decelerationRate: CGFloat = 0.998
+            var isScrollEnabled: Bool = true
+            var showsVerticalScrollIndicator: Bool = true
+            var showsHorizontalScrollIndicator: Bool = true
             
-            func setContentOffset(_ offset: CGPoint, animated: Bool) {
-                contentOffset = offset
+            func setContentOffset(_ offset: CGPoint, animated: Bool) {}
+        }
+        
+        // UIViewRepresentable compatibility
+        protocol UIViewRepresentable: View {
+            associatedtype UIViewType: UIView
+            func makeUIView(context: Self.Context) -> Self.UIViewType
+            func updateUIView(_ uiView: Self.UIViewType, context: Self.Context)
+        }
+        
+        extension UIViewRepresentable {
+            typealias Context = NSViewRepresentableContext<Self>
+            
+            func makeNSView(context: Context) -> UIViewType {
+                return makeUIView(context: context)
+            }
+            
+            func updateNSView(_ nsView: UIViewType, context: Context) {
+                updateUIView(nsView, context: context)
             }
         }
-        typealias UIScrollView = MyUIScrollView
         
-        // View representable protocols
-        protocol UIViewRepresentable {
-            associatedtype UIViewType
-            func makeUIView(context: Context) -> UIViewType
-            func updateUIView(_ uiView: UIViewType, context: Context)
-            typealias Context = NSViewRepresentableContext<NSViewRepresentable>
+        // AVAudioSession compatibility
+        class AVAudioSession: NSObject {
+            static func sharedInstance() -> AVAudioSession { return AVAudioSession() }
+            
+            enum Category: String {
+                case ambient, soloAmbient, playback, record, playAndRecord, multiRoute
+            }
+            
+            struct CategoryOptions: OptionSet {
+                let rawValue: UInt
+                init(rawValue: UInt) { self.rawValue = rawValue }
+                static let mixWithOthers = CategoryOptions(rawValue: 1)
+                static let duckOthers = CategoryOptions(rawValue: 2)
+                static let allowBluetooth = CategoryOptions(rawValue: 4)
+                static let defaultToSpeaker = CategoryOptions(rawValue: 8)
+            }
+            
+            func setCategory(_ category: Category, options: CategoryOptions = []) throws {}
+            func setActive(_ active: Bool, options: UInt = 0) throws {}
+            
+            var outputVolume: Float { return 1.0 }
+            
+            struct RouteChangeNotification {
+                static let notification = NSNotification.Name("AVAudioSessionRouteChangeNotification")
+                static let reasonKey = "AVAudioSessionRouteChangeReasonKey"
+                static let previousRouteKey = "AVAudioSessionPreviousRouteKey"
+            }
+            
+            enum RouteChangeReason: UInt {
+                case unknown = 0
+                case newDeviceAvailable = 1
+                case oldDeviceUnavailable = 2
+                case categoryChange = 3
+                case override = 4
+                case wakeFromSleep = 6
+                case noSuitableRouteForCategory = 7
+                case routeConfigurationChange = 8
+            }
+            
+            struct Port {
+                let portName: String
+                let portType: String
+            }
+            
+            struct Route {
+                let inputs: [Port]
+                let outputs: [Port]
+            }
+            
+            var currentRoute: Route {
+                return Route(inputs: [], outputs: [Port(portName: "Default", portType: "Output")])
+            }
         }
         
         // AVFoundation compatibility
@@ -168,57 +228,6 @@ jobs:
             var rate: Float = 1.0
         }
         
-        class AVAudioSession: NSObject {
-            static func sharedInstance() -> AVAudioSession { return AVAudioSession() }
-            
-            enum Category: String {
-                case ambient, soloAmbient, playback, record, playAndRecord, multiRoute
-            }
-            
-            enum CategoryOptions: UInt {
-                case mixWithOthers = 1
-                case duckOthers = 2
-                case allowBluetooth = 4
-                case defaultToSpeaker = 8
-            }
-            
-            func setCategory(_ category: Category, options: CategoryOptions = []) throws {}
-            func setActive(_ active: Bool, options: UInt = 0) throws {}
-            
-            var outputVolume: Float { return 1.0 }
-            
-            struct RouteChangeNotification {
-                static let notification = NSNotification.Name("AVAudioSessionRouteChangeNotification")
-                static let reasonKey = "AVAudioSessionRouteChangeReasonKey"
-                static let previousRouteKey = "AVAudioSessionPreviousRouteKey"
-            }
-            
-            enum RouteChangeReason: UInt {
-                case unknown = 0
-                case newDeviceAvailable = 1
-                case oldDeviceUnavailable = 2
-                case categoryChange = 3
-                case override = 4
-                case wakeFromSleep = 6
-                case noSuitableRouteForCategory = 7
-                case routeConfigurationChange = 8
-            }
-            
-            struct Port {
-                let portName: String
-                let portType: String
-            }
-            
-            struct Route {
-                let inputs: [Port]
-                let outputs: [Port]
-            }
-            
-            var currentRoute: Route {
-                return Route(inputs: [], outputs: [Port(portName: "Default", portType: "Output")])
-            }
-        }
-        
         // Display link compatibility
         class CADisplayLink {
             static func createDisplayLink(withTarget target: Any, selector: Selector) -> Any {
@@ -253,6 +262,36 @@ jobs:
             let togglePlayPauseCommand = Command()
             let nextTrackCommand = Command()
             let previousTrackCommand = Command()
+        }
+        #endif
+        EOF
+        
+    - name: Create view representable stubs
+      run: |
+        mkdir -p TypeBeat/CI
+        cat > TypeBeat/CI/ViewRepresentableStubs.swift << 'EOF'
+        #if os(macOS)
+        import SwiftUI
+        
+        // Create stubs for the specific view representables that are causing issues
+        extension AudioOutputPicker: NSViewRepresentable {
+            func makeNSView(context: NSViewRepresentableContext<AudioOutputPicker>) -> NSView {
+                return NSView()
+            }
+            
+            func updateNSView(_ nsView: NSView, context: NSViewRepresentableContext<AudioOutputPicker>) {
+                // No-op
+            }
+        }
+        
+        extension DismissableScrollView: NSViewRepresentable {
+            func makeNSView(context: NSViewRepresentableContext<DismissableScrollView>) -> NSView {
+                return NSView()
+            }
+            
+            func updateNSView(_ nsView: NSView, context: NSViewRepresentableContext<DismissableScrollView>) {
+                // No-op
+            }
         }
         #endif
         EOF
