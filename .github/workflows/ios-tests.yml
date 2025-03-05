@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  app-tests:
-    name: App Tests
+  app-build:
+    name: App Build
     runs-on: macos-latest
     
     steps:
@@ -24,11 +24,7 @@ jobs:
         xcrun --sdk macosx --show-sdk-version
         xcodebuild -version
         
-    - name: List Xcode Test Schemes
-      run: |
-        xcodebuild -list -project TypeBeat.xcodeproj || echo "Failed to list schemes"
-        
     - name: Build Project
       run: |
         # Just build the project without running tests
-        xcodebuild build -project TypeBeat.xcodeproj -scheme "TypeBeat" -destination "platform=macOS,variant=Mac Catalyst" MACOSX_DEPLOYMENT_TARGET=14.7 CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO 
+        xcodebuild build -project TypeBeat.xcodeproj -scheme "TypeBeat" -destination "platform=macOS,variant=Mac Catalyst" CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO 
