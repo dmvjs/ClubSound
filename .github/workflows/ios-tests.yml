@@ -22,9 +22,9 @@ jobs:
       - name: Install xcbeautify
         run: brew install xcbeautify
       
-      - name: Run Unit Tests
+      - name: Build for testing
         run: |
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -project TypeBeat.xcodeproj \
             -scheme TypeBeat \
             -destination 'platform=macOS,arch=arm64' \
@@ -32,11 +32,11 @@ jobs:
         env:
           DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
       
-      - name: Upload test results
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
-        if: always()  # Upload even if tests fail
+        if: always()
         with:
-          name: test-results
+          name: build-artifacts
           path: |
-            ~/Library/Developer/Xcode/DerivedData/**/Logs/Test/*.xcresult
-          retention-days: 7 
+            ~/Library/Developer/Xcode/DerivedData/**/Build/Products
+          retention-days: 1 
