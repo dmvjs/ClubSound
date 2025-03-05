@@ -35,7 +35,11 @@ jobs:
         typealias UIImage = NSImage
         typealias UIScreen = NSScreen
         typealias UIApplication = NSApplication
-
+        
+        // UIScrollView compatibility
+        typealias UIScrollView = NSScrollView
+        protocol UIViewRepresentable: NSViewRepresentable {}
+        
         // AVFoundation compatibility
         class AVAudioTime {
             static func now() -> AVAudioTime { return AVAudioTime() }
@@ -67,23 +71,20 @@ jobs:
             func scheduleBuffer(_ buffer: AVAudioPCMBuffer, at time: AVAudioTime?, options: AVAudioPlayerNodeBufferOptions, completionHandler: (() -> Void)?) {}
             func scheduleBuffer(_ buffer: AVAudioPCMBuffer, completionHandler: (() -> Void)?) {}
             func play() {}
-            func play(at time: AVAudioTime) {}
+            func play(at time: AVAudioTime?) {}
             func stop() {}
             func pause() {}
             var isPlaying: Bool { return false }
             var volume: Float = 1.0
+            var rate: Float = 1.0
         }
         
         class AVAudioMixerNode: AVAudioNode {
             var volume: Float = 1.0
         }
         
-        class AVAudioUnitVarispeed: AVAudioNode {
-            var rate: Float = 1.0
-        }
-        
         class AVAudioPCMBuffer {
-            init(pcmFormat: AVAudioFormat, frameCapacity: AVAudioFrameCount) {}
+            init(pcmFormat format: AVAudioFormat, frameCapacity: AVAudioFrameCount) {}
             var frameLength: AVAudioFrameCount = 0
         }
         
@@ -102,6 +103,66 @@ jobs:
         }
         
         class AVAudioOutputNode: AVAudioNode {}
+        
+        class AVAudioUnitTimePitch: AVAudioNode {
+            var pitch: Float = 0.0
+            var rate: Float = 1.0
+        }
+        
+        class AVAudioUnitVarispeed: AVAudioNode {
+            var rate: Float = 1.0
+        }
+        
+        class AVAudioSession {
+            static func sharedInstance() -> AVAudioSession { return AVAudioSession() }
+            
+            enum Category: String {
+                case playback = "playback"
+                case record = "record"
+                case playAndRecord = "playAndRecord"
+            }
+            
+            enum CategoryOptions: UInt {
+                case mixWithOthers = 1
+                case duckOthers = 2
+                case allowBluetooth = 4
+                case defaultToSpeaker = 8
+            }
+            
+            func setCategory(_ category: Category, options: CategoryOptions) throws {}
+            func setActive(_ active: Bool) throws {}
+            
+            var outputVolume: Float { return 1.0 }
+            
+            struct RouteChangeReason: RawRepresentable {
+                let rawValue: UInt
+                init(rawValue: UInt) { self.rawValue = rawValue }
+                static let newDeviceAvailable = RouteChangeReason(rawValue: 1)
+                static let oldDeviceUnavailable = RouteChangeReason(rawValue: 2)
+                static let categoryChange = RouteChangeReason(rawValue: 3)
+            }
+            
+            struct Port {
+                let uid: String
+                let type: PortType
+                
+                struct PortType: RawRepresentable {
+                    let rawValue: String
+                    init(rawValue: String) { self.rawValue = rawValue }
+                    static let builtInSpeaker = PortType(rawValue: "Speaker")
+                    static let headphones = PortType(rawValue: "Headphones")
+                    static let bluetoothA2DP = PortType(rawValue: "BluetoothA2DP")
+                }
+            }
+            
+            struct RouteDescription {
+                let outputs: [Port]
+            }
+            
+            var currentRoute: RouteDescription {
+                return RouteDescription(outputs: [])
+            }
+        }
 
         // System colors compatibility
         extension Color {
@@ -130,39 +191,6 @@ jobs:
             func invalidate() {}
         }
 
-        // Additional compatibility types
-        extension NSApplication {
-            struct LaunchOptionsKey: Hashable {
-                let rawValue: String
-                
-                init(rawValue: String) {
-                    self.rawValue = rawValue
-                }
-                
-                static let blankKey = LaunchOptionsKey(rawValue: "")
-                
-                static func == (lhs: LaunchOptionsKey, rhs: LaunchOptionsKey) -> Bool {
-                    return lhs.rawValue == rhs.rawValue
-                }
-                
-                func hash(into hasher: inout Hasher) {
-                    hasher.combine(rawValue)
-                }
-            }
-        }
-
-        protocol UIApplicationDelegate {
-            func application(_ application: NSApplication, didFinishLaunchingWithOptions launchOptions: [NSApplication.LaunchOptionsKey: Any]?) -> Bool
-        }
-
-        protocol UIViewRepresentable {
-            associatedtype UIViewType
-            func makeUIView(context: Context) -> UIViewType
-            func updateUIView(_ uiView: UIViewType, context: Context)
-            
-            typealias Context = Any
-        }
-
         class MPVolumeView: NSView {}
         class MPNowPlayingInfoCenter: NSObject {
             static let `default` = MPNowPlayingInfoCenter()
@@ -184,7 +212,6 @@ jobs:
             let nextTrackCommand = Command()
             let previousTrackCommand = Command()
         }
-        
         #endif
         EOF
         
