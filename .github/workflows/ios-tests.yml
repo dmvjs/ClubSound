@@ -41,33 +41,29 @@ jobs:
         echo "Finding all Swift test files:"
         find . -name "*Test*.swift" -o -name "*test*.swift" || echo "No test files found"
         
-        echo "Xcode project structure:"
-        find TypeBeat.xcodeproj -type f -name "*.pbxproj" -exec cat {} \; | grep -A 5 "PBXNativeTarget.*Test" || echo "No test targets found in Xcode project"
-        
-    - name: Examine Test Files
-      run: |
-        # Find test files
-        TEST_FILES=$(find . -name "*Test*.swift" -o -name "*test*.swift" | head -n 5)
-        
-        if [ -n "$TEST_FILES" ]; then
-          echo "Found test files:"
-          echo "$TEST_FILES"
-          
-          # Show the content of the first few test files
-          for file in $TEST_FILES; do
-            echo "=== Contents of $file ==="
-            head -n 20 "$file"
-            echo "=== End of preview ==="
-          done
-        else
-          echo "No test files found in the project."
-        fi
-        
     - name: List Xcode Test Schemes
       run: |
         xcodebuild -list -project TypeBeat.xcodeproj || echo "Failed to list schemes"
         
-    - name: Try Running Xcode Tests
+    - name: Try Running Tests with ClubSound Scheme
       run: |
-        # Try to run tests using xcodebuild
-        xcodebuild test -project TypeBeat.xcodeproj -scheme "TypeBeatTests" -destination "platform=macOS" || echo "Failed to run tests with scheme TypeBeatTests" 
+        # Try to run tests using the ClubSound scheme
+        xcodebuild test -project TypeBeat.xcodeproj -scheme "ClubSound" -destination "platform=macOS" || echo "Failed to run tests with scheme ClubSound"
+        
+    - name: Try Running Tests with TypeBeat Scheme
+      run: |
+        # Try to run tests using the TypeBeat scheme
+        xcodebuild test -project TypeBeat.xcodeproj -scheme "TypeBeat" -destination "platform=macOS" || echo "Failed to run tests with scheme TypeBeat"
+        
+    - name: Try Running Tests with Modified Deployment Target
+      run: |
+        # Try to run tests with a modified deployment target
+        xcodebuild test -project TypeBeat.xcodeproj -scheme "TypeBeatTests" -destination "platform=macOS" MACOSX_DEPLOYMENT_TARGET=14.7 || echo "Failed to run tests with modified deployment target"
+        
+    - name: Try Running Tests with Simulator
+      run: |
+        # List available simulators
+        xcrun simctl list devices
+        
+        # Try to run tests on an iOS simulator
+        xcodebuild test -project TypeBeat.xcodeproj -scheme "TypeBeatTests" -destination "platform=iOS Simulator,name=iPhone 15" || echo "Failed to run tests on iOS simulator" 
