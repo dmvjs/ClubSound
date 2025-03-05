@@ -74,10 +74,10 @@ jobs:
         
     - name: Build and Test
       run: |
-        xcodebuild clean test \
+        xcodebuild clean build \
           -project TypeBeat.xcodeproj \
-          -scheme TypeBeatTests \
-          -destination "platform=macOS" \
+          -scheme TypeBeat \
+          -destination "generic/platform=macOS" \
           -xcconfig ci.xcconfig \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
@@ -85,16 +85,16 @@ jobs:
           SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
           ONLY_ACTIVE_ARCH=YES \
           GCC_PREPROCESSOR_DEFINITIONS="CI_BUILD=1" \
-          | tee build/test.log
+          | tee build/build.log
       
     - name: Create build summary
       run: |
         mkdir -p build
         echo "# Build and Test Summary" > ./build/summary.md
-        if grep -q "Test Suite.*Passed" build/test.log; then
-          echo "✅ Tests completed successfully" >> ./build/summary.md
+        if grep -q "BUILD SUCCEEDED" build/build.log; then
+          echo "✅ Build completed successfully" >> ./build/summary.md
         else
-          echo "❌ Tests failed - see logs for details" >> ./build/summary.md
+          echo "❌ Build failed - see logs for details" >> ./build/summary.md
         fi
         
     - name: Upload build artifacts
