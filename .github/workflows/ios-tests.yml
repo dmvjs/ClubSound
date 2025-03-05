@@ -327,6 +327,23 @@ jobs:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS="CI_BUILD" \
           OTHER_SWIFT_FLAGS="-Xfrontend -enable-cross-import-overlays" \
           | tee build/build.log || true
+          
+    - name: Run tests
+      run: |
+        xcodebuild test \
+          -project TypeBeat.xcodeproj \
+          -scheme TypeBeat \
+          -destination "platform=macOS" \
+          -xcconfig ci.xcconfig \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
+          ONLY_ACTIVE_ARCH=YES \
+          GCC_PREPROCESSOR_DEFINITIONS="CI_BUILD=1" \
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS="CI_BUILD" \
+          OTHER_SWIFT_FLAGS="-Xfrontend -enable-cross-import-overlays" \
+          | tee build/test.log || true
       
     - name: Create build summary
       run: |
@@ -343,6 +360,22 @@ jobs:
           # Extract specific errors for easier debugging
           echo "### Build Errors" >> ./build/summary.md
           grep -A 2 "error:" build/build.log | head -n 20 >> ./build/summary.md
+        fi
+        
+        if [ -f build/test.log ]; then
+          if grep -q "Test Suite.*passed" build/test.log; then
+            echo "✅ Tests passed successfully" >> ./build/summary.md
+            
+            # Extract test results
+            echo "### Test Results" >> ./build/summary.md
+            grep -A 1 "Test Suite.*passed" build/test.log >> ./build/summary.md
+          else
+            echo "❌ Tests failed - see logs for details" >> ./build/summary.md
+            
+            # Extract test failures
+            echo "### Test Failures" >> ./build/summary.md
+            grep -A 5 "failed with exit code" build/test.log >> ./build/summary.md
+          fi
         fi
         
     - name: Upload build artifacts
