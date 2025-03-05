@@ -57,31 +57,23 @@ jobs:
             }
         }
 
-        // UIApplicationDelegate protocol
         protocol UIApplicationDelegate {
             func application(_ application: NSApplication, didFinishLaunchingWithOptions launchOptions: [NSApplication.LaunchOptionsKey: Any]?) -> Bool
         }
 
-        // UIViewRepresentable protocol
         protocol UIViewRepresentable {
             associatedtype UIViewType
-            typealias Context = NSView.Context
             func makeUIView(context: Context) -> UIViewType
             func updateUIView(_ uiView: UIViewType, context: Context)
-        }
-
-        extension NSView {
             typealias Context = Any
         }
 
-        // Mock for iOS-specific classes
         class MPVolumeView: NSView {}
         class UIScrollView: NSView {}
         class AVAudioSession: NSObject {
             static func sharedInstance() -> AVAudioSession { return AVAudioSession() }
+            func setCategory(_ category: String) throws {}
         }
-        
-        // AVFoundation compatibility
         typealias AVAudioTime = NSObject
         typealias AVAudioFramePosition = Int64
         typealias AVAudioEngine = NSObject
@@ -90,10 +82,6 @@ jobs:
         typealias AVAudioUnitVarispeed = NSObject
         typealias AVAudioUnitTimePitch = NSObject
         typealias AVAudioPCMBuffer = NSObject
-        
-        extension AVAudioTime {
-            static func now() -> AVAudioTime { return AVAudioTime() }
-        }
         #endif
         EOF
         
@@ -139,7 +127,7 @@ jobs:
         # Fix AVFoundation imports
         find TypeBeat -name "*.swift" -type f -exec grep -l "import AVFoundation" {} \; | while read file; do
           echo "Fixing AVFoundation imports in $file"
-          sed -i '' 's/import AVFoundation/import SwiftUI\n#if os(iOS)\nimport AVFoundation\n#else\n\/\/ AVFoundation compatibility provided by CI\/CrossPlatformImports.swift\n#endif/' "$file"
+          sed -i '' 's/import AVFoundation/import SwiftUI\n#if os(iOS)\nimport AVFoundation\n#else\n\/\/ AVFoundation compatibility provided by TypeBeat\/CI\/CrossPlatformImports.swift\n#endif/' "$file"
         done
         
         # Fix MediaPlayer imports
@@ -147,11 +135,6 @@ jobs:
           echo "Fixing MediaPlayer imports in $file"
           sed -i '' 's/import MediaPlayer/import SwiftUI\n#if os(iOS)\nimport MediaPlayer\n#endif/' "$file"
         done
-        
-        # Add import for CrossPlatformImports - using proper module import
-        echo "#if os(macOS)" > TypeBeat/CI/CrossPlatformImportsModule.swift
-        cat TypeBeat/CI/CrossPlatformImports.swift >> TypeBeat/CI/CrossPlatformImportsModule.swift
-        echo "#endif" >> TypeBeat/CI/CrossPlatformImportsModule.swift
         
     - name: Create build directory
       run: mkdir -p build
