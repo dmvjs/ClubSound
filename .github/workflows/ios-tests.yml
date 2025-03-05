@@ -26,11 +26,19 @@ jobs:
         
     - name: Compile Swift Files
       run: |
-        # Find all Swift files in the project
-        SWIFT_FILES=$(find . -name "*.swift" | grep -v "Tests")
+        # Find Swift files only in the main project directories
+        SWIFT_FILES=$(find ./TypeBeat -name "*.swift" | grep -v "Tests")
+        
+        # Add any other Swift files from the root directory
+        ROOT_SWIFT_FILES=$(find . -maxdepth 1 -name "*.swift")
+        if [ -n "$ROOT_SWIFT_FILES" ]; then
+          SWIFT_FILES="$SWIFT_FILES $ROOT_SWIFT_FILES"
+        fi
         
         # Compile them without building a full app
         if [ -n "$SWIFT_FILES" ]; then
+          echo "Found Swift files to check:"
+          echo "$SWIFT_FILES"
           xcrun swiftc -sdk $(xcrun --show-sdk-path --sdk macosx) -target x86_64-apple-macos14.7 -typecheck $SWIFT_FILES
           echo "Swift compilation check completed successfully"
         else
