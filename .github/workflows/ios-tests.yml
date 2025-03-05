@@ -141,5 +141,10 @@ jobs:
     - name: Compile and Run Simple Test
       run: |
         cd SimpleTests
-        /Applications/Xcode_16.2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -o run_tests simple_test.swift
+        # Get SDK path and specify target explicitly
+        SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
+        /Applications/Xcode_16.2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc \
+          -sdk $SDK_PATH \
+          -target x86_64-apple-macosx12.0 \
+          -o run_tests simple_test.swift
         ./run_tests 
