@@ -334,6 +334,8 @@ jobs:
           -project TypeBeat.xcodeproj \
           -scheme TypeBeat \
           -destination "platform=macOS" \
+          -sdk macosx \
+          -configuration Debug \
           -xcconfig ci.xcconfig \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
