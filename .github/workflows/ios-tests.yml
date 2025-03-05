@@ -20,14 +20,29 @@ jobs:
       
     - name: Create Standalone Test Project
       run: |
-        # Create a completely standalone test project
-        mkdir -p StandaloneTests
+        # Create a completely standalone test project with separate directories
+        mkdir -p StandaloneTests/Sources/StandaloneTests
+        mkdir -p StandaloneTests/Tests/StandaloneTestsTests
+        
+        # Create a simple source file
+        cat > StandaloneTests/Sources/StandaloneTests/Utils.swift << 'EOF'
+        public struct Utils {
+            public static func add(_ a: Int, _ b: Int) -> Int {
+                return a + b
+            }
+            
+            public static func multiply(_ a: Int, _ b: Int) -> Int {
+                return a * b
+            }
+        }
+        EOF
         
         # Create a simple test file
-        cat > StandaloneTests/BasicTests.swift << 'EOF'
+        cat > StandaloneTests/Tests/StandaloneTestsTests/BasicTests.swift << 'EOF'
         import XCTest
+        @testable import StandaloneTests
 
-        class BasicTests: XCTestCase {
+        final class BasicTests: XCTestCase {
             func testExample() {
                 // This is a simple test that always passes
                 XCTAssertTrue(true)
@@ -37,14 +52,16 @@ jobs:
                 // Basic math test
                 XCTAssertEqual(2 + 2, 4)
             }
+            
+            func testUtils() {
+                XCTAssertEqual(Utils.add(2, 2), 4)
+                XCTAssertEqual(Utils.multiply(3, 4), 12)
+            }
         }
         EOF
         
-        # Create a project file
-        mkdir -p StandaloneTests.xcodeproj
-        
-        # Create a simple Package.swift file
-        cat > Package.swift << 'EOF'
+        # Create a Package.swift file with proper directory structure
+        cat > StandaloneTests/Package.swift << 'EOF'
         // swift-tools-version:5.5
         import PackageDescription
 
@@ -55,12 +72,19 @@ jobs:
                 .library(name: "StandaloneTests", targets: ["StandaloneTests"]),
             ],
             targets: [
-                .target(name: "StandaloneTests", path: "StandaloneTests"),
-                .testTarget(name: "StandaloneTestsTests", dependencies: ["StandaloneTests"], path: "StandaloneTests"),
+                .target(
+                    name: "StandaloneTests",
+                    dependencies: []
+                ),
+                .testTarget(
+                    name: "StandaloneTestsTests",
+                    dependencies: ["StandaloneTests"]
+                ),
             ]
         )
         EOF
         
     - name: Run Swift Package Tests
       run: |
+        cd StandaloneTests
         swift test 
