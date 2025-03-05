@@ -34,11 +34,63 @@ jobs:
         typealias UIFont = NSFont
         typealias UIImage = NSImage
         typealias UIScreen = NSScreen
-        typealias UIApplication = NSApplication
+        
+        // UIApplication compatibility
+        typealias UIApplicationDelegate = NSApplicationDelegate
+        
+        class UIApplication {
+            static let shared = UIApplication()
+            
+            struct LaunchOptionsKey: RawRepresentable, Hashable {
+                let rawValue: String
+                init(rawValue: String) { self.rawValue = rawValue }
+            }
+            
+            func open(_ url: URL, options: [String: Any] = [:], completionHandler: ((Bool) -> Void)? = nil) {
+                NSWorkspace.shared.open(url)
+                completionHandler?(true)
+            }
+            
+            func endEditing() {}
+        }
         
         // UIScrollView compatibility
-        typealias UIScrollView = NSScrollView
-        protocol UIViewRepresentable: NSViewRepresentable {}
+        class UIScrollView: NSScrollView {
+            var contentOffset: CGPoint = .zero
+            var contentSize: CGSize = .zero
+            var contentInset: NSEdgeInsets = .zero
+            var delegate: Any?
+            var isScrollEnabled: Bool = true
+            var showsHorizontalScrollIndicator: Bool = true
+            var showsVerticalScrollIndicator: Bool = true
+            var bounces: Bool = true
+            var alwaysBounceVertical: Bool = false
+            var alwaysBounceHorizontal: Bool = false
+            var isPagingEnabled: Bool = false
+            var decelerationRate: CGFloat = 0.998
+            
+            func setContentOffset(_ offset: CGPoint, animated: Bool) {
+                contentOffset = offset
+            }
+        }
+        
+        // View representable protocols
+        protocol UIViewRepresentable {
+            associatedtype UIViewType
+            func makeUIView(context: Context) -> UIViewType
+            func updateUIView(_ uiView: UIViewType, context: Context)
+            typealias Context = NSViewRepresentableContext<Self>
+        }
+        
+        extension UIViewRepresentable where Self: NSViewRepresentable, UIViewType == NSViewType {
+            func makeNSView(context: NSViewRepresentableContext<Self>) -> NSViewType {
+                return makeUIView(context: context as! Context)
+            }
+            
+            func updateNSView(_ nsView: NSViewType, context: NSViewRepresentableContext<Self>) {
+                updateUIView(nsView, context: context as! Context)
+            }
+        }
         
         // AVFoundation compatibility
         class AVAudioTime {
