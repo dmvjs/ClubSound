@@ -22,15 +22,26 @@ jobs:
       - name: Install xcbeautify
         run: brew install xcbeautify
       
-      - name: List available destinations
-        run: xcodebuild -project TypeBeat.xcodeproj -list
+      - name: Download iOS 18.2 Runtime
+        run: |
+          # Download and install iOS 18.2 runtime
+          sudo xcode-select -s /Applications/Xcode_16.2.app
+          xcrun simctl list runtimes
+          xcrun simctl runtime add iOS18.2
+          xcrun simctl list runtimes
+      
+      - name: Create iOS 18.2 Simulator
+        run: |
+          DEVICE_ID=$(xcrun simctl create "iPhone 15" "iPhone 15" iOS18.2)
+          echo "DEVICE_ID=$DEVICE_ID" >> $GITHUB_ENV
+          xcrun simctl boot "$DEVICE_ID"
       
       - name: Build and test
         run: |
           xcodebuild test \
             -project TypeBeat.xcodeproj \
             -scheme TypeBeat \
-            -destination 'platform=iOS Simulator,name=iPhone 15,OS=18.2' \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
             -testPlan TypeBeatUITests \
             | xcbeautify
         env:
