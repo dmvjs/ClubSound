@@ -24,46 +24,11 @@ jobs:
         xcrun --sdk macosx --show-sdk-version
         xcodebuild -version
         
-    - name: Explore Project Structure
-      run: |
-        echo "Project root contents:"
-        ls -la
-        
-        echo "Tests directory contents:"
-        ls -la Tests/ || echo "No Tests directory at root level"
-        
-        echo "TypeBeat directory contents:"
-        ls -la TypeBeat/ || echo "No TypeBeat directory"
-        
-        echo "TypeBeat/Tests directory contents:"
-        ls -la TypeBeat/Tests/ || echo "No TypeBeat/Tests directory"
-        
-        echo "Finding all Swift test files:"
-        find . -name "*Test*.swift" -o -name "*test*.swift" || echo "No test files found"
-        
     - name: List Xcode Test Schemes
       run: |
         xcodebuild -list -project TypeBeat.xcodeproj || echo "Failed to list schemes"
         
-    - name: Try Running Tests with ClubSound Scheme
+    - name: Run Tests with Mac Catalyst
       run: |
-        # Try to run tests using the ClubSound scheme
-        xcodebuild test -project TypeBeat.xcodeproj -scheme "ClubSound" -destination "platform=macOS" || echo "Failed to run tests with scheme ClubSound"
-        
-    - name: Try Running Tests with TypeBeat Scheme
-      run: |
-        # Try to run tests using the TypeBeat scheme
-        xcodebuild test -project TypeBeat.xcodeproj -scheme "TypeBeat" -destination "platform=macOS" || echo "Failed to run tests with scheme TypeBeat"
-        
-    - name: Try Running Tests with Modified Deployment Target
-      run: |
-        # Try to run tests with a modified deployment target
-        xcodebuild test -project TypeBeat.xcodeproj -scheme "TypeBeatTests" -destination "platform=macOS" MACOSX_DEPLOYMENT_TARGET=14.7 || echo "Failed to run tests with modified deployment target"
-        
-    - name: Try Running Tests with Simulator
-      run: |
-        # List available simulators
-        xcrun simctl list devices
-        
-        # Try to run tests on an iOS simulator
-        xcodebuild test -project TypeBeat.xcodeproj -scheme "TypeBeatTests" -destination "platform=iOS Simulator,name=iPhone 15" || echo "Failed to run tests on iOS simulator" 
+        # Run tests using Mac Catalyst destination
+        xcodebuild test -project TypeBeat.xcodeproj -scheme "TypeBeatTests" -destination "platform=macOS,variant=Mac Catalyst" MACOSX_DEPLOYMENT_TARGET=14.7 || echo "Failed to run tests with Mac Catalyst" 
