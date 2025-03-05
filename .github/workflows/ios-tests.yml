@@ -36,6 +36,73 @@ jobs:
         typealias UIScreen = NSScreen
         typealias UIApplication = NSApplication
 
+        // AVFoundation compatibility
+        class AVAudioTime {
+            static func now() -> AVAudioTime { return AVAudioTime() }
+            var sampleTime: Int64 { return 0 }
+            var sampleRate: Double { return 44100.0 }
+        }
+        
+        typealias AVAudioFramePosition = Int64
+        
+        class AVAudioEngine {
+            let mainMixerNode = AVAudioMixerNode()
+            let outputNode = AVAudioOutputNode()
+            func connect(_ node1: AVAudioNode, to node2: AVAudioNode, format: AVAudioFormat?) {}
+            func prepare() {}
+            func start() throws {}
+            func stop() {}
+            func reset() {}
+            func attachNode(_ node: AVAudioNode) {}
+            func detachNode(_ node: AVAudioNode) {}
+        }
+        
+        class AVAudioNode {
+            var engine: AVAudioEngine? { return nil }
+            var lastRenderTime: AVAudioTime? { return nil }
+            func reset() {}
+        }
+        
+        class AVAudioPlayerNode: AVAudioNode {
+            func scheduleBuffer(_ buffer: AVAudioPCMBuffer, at time: AVAudioTime?, options: AVAudioPlayerNodeBufferOptions, completionHandler: (() -> Void)?) {}
+            func scheduleBuffer(_ buffer: AVAudioPCMBuffer, completionHandler: (() -> Void)?) {}
+            func play() {}
+            func play(at time: AVAudioTime) {}
+            func stop() {}
+            func pause() {}
+            var isPlaying: Bool { return false }
+            var volume: Float = 1.0
+        }
+        
+        class AVAudioMixerNode: AVAudioNode {
+            var volume: Float = 1.0
+        }
+        
+        class AVAudioUnitVarispeed: AVAudioNode {
+            var rate: Float = 1.0
+        }
+        
+        class AVAudioPCMBuffer {
+            init(pcmFormat: AVAudioFormat, frameCapacity: AVAudioFrameCount) {}
+            var frameLength: AVAudioFrameCount = 0
+        }
+        
+        typealias AVAudioFrameCount = UInt32
+        
+        class AVAudioFormat {
+            init(standardFormatWithSampleRate sampleRate: Double, channels: AVAudioChannelCount) {}
+        }
+        
+        typealias AVAudioChannelCount = UInt32
+        
+        struct AVAudioPlayerNodeBufferOptions: OptionSet {
+            let rawValue: UInt
+            init(rawValue: UInt) { self.rawValue = rawValue }
+            static let loops = AVAudioPlayerNodeBufferOptions(rawValue: 1)
+        }
+        
+        class AVAudioOutputNode: AVAudioNode {}
+
         // System colors compatibility
         extension Color {
             static func systemGray4() -> Color { Color(NSColor.systemGray) }
