@@ -36,6 +36,33 @@ jobs:
         typealias UIScreen = NSScreen
         typealias UIApplication = NSApplication
 
+        // System colors compatibility
+        extension Color {
+            static func systemGray4() -> Color { Color(NSColor.systemGray) }
+            static func systemGray6() -> Color { Color(NSColor.windowBackgroundColor) }
+        }
+
+        // Haptic feedback compatibility
+        class UIImpactFeedbackGenerator {
+            enum FeedbackStyle { case light, medium, heavy }
+            init(style: FeedbackStyle) {}
+            func impactOccurred() {}
+        }
+
+        // Display link compatibility
+        class CADisplayLink {
+            static func createDisplayLink(withTarget target: Any, selector: Selector) -> Any {
+                return NSObject()
+            }
+            
+            convenience init(target: Any, selector: Selector) {
+                self.init()
+            }
+            
+            func add(to runloop: Any, forMode mode: Any) {}
+            func invalidate() {}
+        }
+
         // Additional compatibility types
         extension NSApplication {
             struct LaunchOptionsKey: Hashable {
@@ -47,12 +74,12 @@ jobs:
                 
                 static let blankKey = LaunchOptionsKey(rawValue: "")
                 
-                func hash(into hasher: inout Hasher) {
-                    hasher.combine(rawValue)
-                }
-                
                 static func == (lhs: LaunchOptionsKey, rhs: LaunchOptionsKey) -> Bool {
                     return lhs.rawValue == rhs.rawValue
+                }
+                
+                func hash(into hasher: inout Hasher) {
+                    hasher.combine(rawValue)
                 }
             }
         }
@@ -65,23 +92,32 @@ jobs:
             associatedtype UIViewType
             func makeUIView(context: Context) -> UIViewType
             func updateUIView(_ uiView: UIViewType, context: Context)
+            
             typealias Context = Any
         }
 
         class MPVolumeView: NSView {}
-        class UIScrollView: NSView {}
-        class AVAudioSession: NSObject {
-            static func sharedInstance() -> AVAudioSession { return AVAudioSession() }
-            func setCategory(_ category: String) throws {}
+        class MPNowPlayingInfoCenter: NSObject {
+            static let `default` = MPNowPlayingInfoCenter()
+            var nowPlayingInfo: [String: Any]?
         }
-        typealias AVAudioTime = NSObject
-        typealias AVAudioFramePosition = Int64
-        typealias AVAudioEngine = NSObject
-        typealias AVAudioPlayerNode = NSObject
-        typealias AVAudioMixerNode = NSObject
-        typealias AVAudioUnitVarispeed = NSObject
-        typealias AVAudioUnitTimePitch = NSObject
-        typealias AVAudioPCMBuffer = NSObject
+        
+        class MPRemoteCommandCenter: NSObject {
+            static let shared = MPRemoteCommandCenter()
+            
+            class Command: NSObject {
+                var isEnabled: Bool = false
+                func addTarget(_ target: Any, action: Selector) -> Any { return NSObject() }
+                func removeTarget(_ target: Any) {}
+            }
+            
+            let playCommand = Command()
+            let pauseCommand = Command()
+            let togglePlayPauseCommand = Command()
+            let nextTrackCommand = Command()
+            let previousTrackCommand = Command()
+        }
+        
         #endif
         EOF
         
