@@ -40,7 +40,12 @@ jobs:
         extension NSApplication {
             struct LaunchOptionsKey: Hashable {
                 let rawValue: String
-                static let url = LaunchOptionsKey(rawValue: "url")
+                
+                init(rawValue: String) {
+                    self.rawValue = rawValue
+                }
+                
+                static let blankKey = LaunchOptionsKey(rawValue: "")
                 
                 func hash(into hasher: inout Hasher) {
                     hasher.combine(rawValue)
@@ -52,10 +57,12 @@ jobs:
             }
         }
 
+        // UIApplicationDelegate protocol
         protocol UIApplicationDelegate {
             func application(_ application: NSApplication, didFinishLaunchingWithOptions launchOptions: [NSApplication.LaunchOptionsKey: Any]?) -> Bool
         }
 
+        // UIViewRepresentable protocol
         protocol UIViewRepresentable {
             associatedtype UIViewType
             typealias Context = NSView.Context
@@ -87,10 +94,6 @@ jobs:
         extension AVAudioTime {
             static func now() -> AVAudioTime { return AVAudioTime() }
         }
-        #else
-        import UIKit
-        import MediaPlayer
-        import AVFoundation
         #endif
         EOF
         
@@ -121,6 +124,13 @@ jobs:
         
     - name: Fix platform-specific imports
       run: |
+        # Remove any existing import modifications first
+        find TypeBeat -name "*.swift" -type f -exec sed -i '' '/^import "TypeBeat\/CI\/CrossPlatformImports.swift"/d' {} \;
+        
+        # Add proper conditional imports at the top of each file
+        find TypeBeat -name "*.swift" -type f -not -path "*/CI/*" -exec sed -i '' '1s/^/import SwiftUI\n#if os(macOS)\n@_exported import Foundation\n#endif\n\n/' {} \;
+        
+        # Fix UIKit imports
         find TypeBeat -name "*.swift" -type f -exec grep -l "import UIKit" {} \; | while read file; do
           echo "Fixing imports in $file"
           sed -i '' 's/import UIKit/import SwiftUI\n#if os(iOS)\nimport UIKit\n#endif/' "$file"
@@ -129,7 +139,7 @@ jobs:
         # Fix AVFoundation imports
         find TypeBeat -name "*.swift" -type f -exec grep -l "import AVFoundation" {} \; | while read file; do
           echo "Fixing AVFoundation imports in $file"
-          sed -i '' 's/import AVFoundation/import SwiftUI\n#if os(iOS)\nimport AVFoundation\n#else\n\/\/ AVFoundation compatibility provided by CrossPlatformImports\n#endif/' "$file"
+          sed -i '' 's/import AVFoundation/import SwiftUI\n#if os(iOS)\nimport AVFoundation\n#else\n\/\/ AVFoundation compatibility provided by CI\/CrossPlatformImports.swift\n#endif/' "$file"
         done
         
         # Fix MediaPlayer imports
@@ -138,8 +148,10 @@ jobs:
           sed -i '' 's/import MediaPlayer/import SwiftUI\n#if os(iOS)\nimport MediaPlayer\n#endif/' "$file"
         done
         
-        # Add import for CrossPlatformImports
-        find TypeBeat -name "*.swift" -type f -not -path "*/CI/*" -exec sed -i '' '1s/^/import SwiftUI\n#if os(macOS)\nimport "TypeBeat\/CI\/CrossPlatformImports.swift"\n#endif\n\n/' {} \;
+        # Add import for CrossPlatformImports - using proper module import
+        echo "#if os(macOS)" > TypeBeat/CI/CrossPlatformImportsModule.swift
+        cat TypeBeat/CI/CrossPlatformImports.swift >> TypeBeat/CI/CrossPlatformImportsModule.swift
+        echo "#endif" >> TypeBeat/CI/CrossPlatformImportsModule.swift
         
     - name: Create build directory
       run: mkdir -p build
@@ -158,6 +170,7 @@ jobs:
           ONLY_ACTIVE_ARCH=YES \
           GCC_PREPROCESSOR_DEFINITIONS="CI_BUILD=1" \
           SWIFT_ACTIVE_COMPILATION_CONDITIONS="CI_BUILD" \
+          OTHER_SWIFT_FLAGS="-Xfrontend -enable-cross-import-overlays" \
           | tee build/build.log || true
       
     - name: Create build summary
@@ -171,6 +184,10 @@ jobs:
           echo "### Common Issues" >> ./build/summary.md
           echo "- iOS-specific APIs need platform-specific implementations" >> ./build/summary.md
           echo "- Missing mock implementations in CrossPlatformImports.swift" >> ./build/summary.md
+          
+          # Extract specific errors for easier debugging
+          echo "### Build Errors" >> ./build/summary.md
+          grep -A 2 "error:" build/build.log | head -n 20 >> ./build/summary.md
         fi
         
     - name: Upload build artifacts
