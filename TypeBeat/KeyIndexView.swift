@@ -85,7 +85,6 @@ struct KeyIndexView: View {
             if let bpmGroup = groupedSamples.first(where: { abs($0.0 - selectedBPM) < 0.01 }) {
                 // Extract all keys from this BPM group and sort them
                 let keys = bpmGroup.1.map { $0.0 }.sorted()
-                print("Available keys for BPM \(selectedBPM): \(keys)")
                 return keys
             }
         }

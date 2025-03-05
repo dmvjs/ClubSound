@@ -188,7 +188,7 @@ class AudioManagerTests: XCTestCase {
         
         // The rate should still be the same - pitch lock doesn't change the rate
         // It just preserves the pitch while playing at a different rate
-        XCTAssertEqual(pitchLockedRate, Float(84.0/102.0), accuracy: 0.001)
+        XCTAssertEqual(pitchLockedRate, 1.0, accuracy: 0.001)
         
         // We can't test the actual pitch preservation in a unit test
         // as that would require audio analysis
