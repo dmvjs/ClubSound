@@ -1,0 +1,50 @@
+name: iOS Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  project-check:
+    name: Project Check
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+      
+    - name: Check Environment
+      run: |
+        sw_vers
+        xcrun --sdk macosx --show-sdk-version
+        xcodebuild -version
+        
+    - name: Verify Project Structure
+      run: |
+        # Check if the project file exists
+        if [ -f "TypeBeat.xcodeproj/project.pbxproj" ]; then
+          echo "✅ Project file exists"
+        else
+          echo "❌ Project file not found"
+          exit 1
+        fi
+        
+        # Check if there are Swift files
+        SWIFT_FILES_COUNT=$(find . -name "*.swift" | wc -l)
+        if [ $SWIFT_FILES_COUNT -gt 0 ]; then
+          echo "✅ Found $SWIFT_FILES_COUNT Swift files"
+        else
+          echo "❌ No Swift files found"
+          exit 1
+        fi
+        
+        # List schemes
+        echo "Available schemes:"
+        xcodebuild -list -project TypeBeat.xcodeproj
+        
+        echo "Project structure verification completed successfully" 
