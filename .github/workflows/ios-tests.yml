@@ -25,6 +25,7 @@ jobs:
         #if os(macOS)
         import AppKit
         import SwiftUI
+        import AVFoundation
 
         // UIKit compatibility layer for macOS
         typealias UIViewController = NSViewController
@@ -37,8 +38,17 @@ jobs:
 
         // Additional compatibility types
         extension NSApplication {
-            struct LaunchOptionsKey {
-                static let url = "url"
+            struct LaunchOptionsKey: Hashable {
+                let rawValue: String
+                static let url = LaunchOptionsKey(rawValue: "url")
+                
+                func hash(into hasher: inout Hasher) {
+                    hasher.combine(rawValue)
+                }
+                
+                static func == (lhs: LaunchOptionsKey, rhs: LaunchOptionsKey) -> Bool {
+                    return lhs.rawValue == rhs.rawValue
+                }
             }
         }
 
@@ -62,6 +72,20 @@ jobs:
         class UIScrollView: NSView {}
         class AVAudioSession: NSObject {
             static func sharedInstance() -> AVAudioSession { return AVAudioSession() }
+        }
+        
+        // AVFoundation compatibility
+        typealias AVAudioTime = NSObject
+        typealias AVAudioFramePosition = Int64
+        typealias AVAudioEngine = NSObject
+        typealias AVAudioPlayerNode = NSObject
+        typealias AVAudioMixerNode = NSObject
+        typealias AVAudioUnitVarispeed = NSObject
+        typealias AVAudioUnitTimePitch = NSObject
+        typealias AVAudioPCMBuffer = NSObject
+        
+        extension AVAudioTime {
+            static func now() -> AVAudioTime { return AVAudioTime() }
         }
         #else
         import UIKit
@@ -99,20 +123,23 @@ jobs:
       run: |
         find TypeBeat -name "*.swift" -type f -exec grep -l "import UIKit" {} \; | while read file; do
           echo "Fixing imports in $file"
-          sed -i '' 's/import UIKit/import SwiftUI\n#if os(iOS)\nimport UIKit\n#else\nimport "CI\/CrossPlatformImports.swift"\n#endif/' "$file"
+          sed -i '' 's/import UIKit/import SwiftUI\n#if os(iOS)\nimport UIKit\n#endif/' "$file"
         done
         
         # Fix AVFoundation imports
         find TypeBeat -name "*.swift" -type f -exec grep -l "import AVFoundation" {} \; | while read file; do
           echo "Fixing AVFoundation imports in $file"
-          sed -i '' 's/import AVFoundation/import SwiftUI\n#if os(iOS)\nimport AVFoundation\n#else\nimport "CI\/CrossPlatformImports.swift"\n#endif/' "$file"
+          sed -i '' 's/import AVFoundation/import SwiftUI\n#if os(iOS)\nimport AVFoundation\n#else\n\/\/ AVFoundation compatibility provided by CrossPlatformImports\n#endif/' "$file"
         done
         
         # Fix MediaPlayer imports
         find TypeBeat -name "*.swift" -type f -exec grep -l "import MediaPlayer" {} \; | while read file; do
           echo "Fixing MediaPlayer imports in $file"
-          sed -i '' 's/import MediaPlayer/import SwiftUI\n#if os(iOS)\nimport MediaPlayer\n#else\nimport "CI\/CrossPlatformImports.swift"\n#endif/' "$file"
+          sed -i '' 's/import MediaPlayer/import SwiftUI\n#if os(iOS)\nimport MediaPlayer\n#endif/' "$file"
         done
+        
+        # Add import for CrossPlatformImports
+        find TypeBeat -name "*.swift" -type f -not -path "*/CI/*" -exec sed -i '' '1s/^/import SwiftUI\n#if os(macOS)\nimport "TypeBeat\/CI\/CrossPlatformImports.swift"\n#endif\n\n/' {} \;
         
     - name: Create build directory
       run: mkdir -p build
