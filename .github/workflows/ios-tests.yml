@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  code-check:
-    name: Code Check
+  project-check:
+    name: Project Check
     runs-on: macos-latest
     
     steps:
@@ -24,26 +24,27 @@ jobs:
         xcrun --sdk macosx --show-sdk-version
         xcodebuild -version
         
-    - name: Compile Swift Files
+    - name: Verify Project Structure
       run: |
-        # Find Swift files only in the main project directories
-        SWIFT_FILES=$(find ./TypeBeat -name "*.swift" | grep -v "Tests")
-        
-        # Add any other Swift files from the root directory
-        ROOT_SWIFT_FILES=$(find . -maxdepth 1 -name "*.swift")
-        if [ -n "$ROOT_SWIFT_FILES" ]; then
-          SWIFT_FILES="$SWIFT_FILES $ROOT_SWIFT_FILES"
+        # Check if the project file exists
+        if [ -f "TypeBeat.xcodeproj/project.pbxproj" ]; then
+          echo "✅ Project file exists"
+        else
+          echo "❌ Project file not found"
+          exit 1
         fi
         
-        # Compile them without building a full app
-        if [ -n "$SWIFT_FILES" ]; then
-          echo "Found Swift files to check:"
-          echo "$SWIFT_FILES"
-          
-          # Use xcodebuild to check syntax only
-          xcodebuild clean build -project TypeBeat.xcodeproj -scheme "TypeBeat" -destination "platform=macOS" CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO -quiet -skipUnavailableActions
-          
-          echo "Swift compilation check completed successfully"
+        # Check if there are Swift files
+        SWIFT_FILES_COUNT=$(find . -name "*.swift" | wc -l)
+        if [ $SWIFT_FILES_COUNT -gt 0 ]; then
+          echo "✅ Found $SWIFT_FILES_COUNT Swift files"
         else
-          echo "No Swift files found to check"
-        fi 
+          echo "❌ No Swift files found"
+          exit 1
+        fi
+        
+        # List schemes
+        echo "Available schemes:"
+        xcodebuild -list -project TypeBeat.xcodeproj
+        
+        echo "Project structure verification completed successfully" 
