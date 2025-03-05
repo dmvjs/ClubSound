@@ -1,32 +1,49 @@
-name: CI Build
+name: iOS Tests
 
 on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 jobs:
-  build:
+  test:
     name: Build and Test
-    runs-on: macos-14
+    runs-on: macos-latest
     
     steps:
-    - name: Checkout repository
+    - name: Checkout
       uses: actions/checkout@v4
       
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
       
-    - name: Create CI compatibility file
+    - name: Setup CI Environment
       run: |
         mkdir -p TypeBeat/CI
+        
+        # Create a proper ViewRepresentableStubs.swift file
+        cat > TypeBeat/CI/ViewRepresentableStubs.swift << 'EOF'
+        #if os(macOS)
+        import SwiftUI
+        import AppKit
+
+        // Protocol stubs for UIViewRepresentable compatibility
+        protocol NSViewRepresentableCompat {
+            associatedtype NSViewType: NSView
+            func makeNSView(context: NSViewRepresentableContext<Self>) -> Self.NSViewType
+            func updateNSView(_ nsView: Self.NSViewType, context: NSViewRepresentableContext<Self>)
+        }
+        #endif
+        EOF
+        
+        # Fix CrossPlatformImports.swift
         cat > TypeBeat/CI/CrossPlatformImports.swift << 'EOF'
         #if os(macOS)
         import AppKit
         import SwiftUI
         import AVFoundation
-
+        
         // UIKit compatibility layer for macOS
         typealias UIViewController = NSViewController
         typealias UIView = NSView
@@ -57,12 +74,11 @@ jobs:
             
             // Use a computed property to avoid overriding NSScrollView's contentSize
             private var _contentSize: CGSize = .zero
-            var contentSize: CGSize {
-                get { return _contentSize }
-                set { _contentSize = newValue }
+            override var contentSize: NSSize {
+                get { return NSSize(width: _contentSize.width, height: _contentSize.height) }
+                set { _contentSize = CGSize(width: newValue.width, height: newValue.height) }
             }
             
-            // Use NSEdgeInsetsZero instead of .zero
             var contentInset: NSEdgeInsets = NSEdgeInsetsZero
             var bounces: Bool = true
             var alwaysBounceVertical: Bool = false
@@ -74,21 +90,21 @@ jobs:
         }
         
         // UIViewRepresentable compatibility
-        protocol UIViewRepresentable: View {
+        protocol UIViewRepresentable: NSViewRepresentable {
             associatedtype UIViewType: UIView
-            func makeUIView(context: Self.Context) -> Self.UIViewType
-            func updateUIView(_ uiView: Self.UIViewType, context: Self.Context)
+            func makeUIView(context: Context) -> Self.UIViewType
+            func updateUIView(_ uiView: Self.UIViewType, context: Context)
         }
         
         extension UIViewRepresentable {
-            typealias Context = NSViewRepresentableContext<Self>
-            
-            func makeNSView(context: Context) -> UIViewType {
+            func makeNSView(context: Context) -> NSView {
                 return makeUIView(context: context)
             }
             
-            func updateNSView(_ nsView: UIViewType, context: Context) {
-                updateUIView(nsView, context: context)
+            func updateNSView(_ nsView: NSView, context: Context) {
+                if let uiView = nsView as? Self.UIViewType {
+                    updateUIView(uiView, context: context)
+                }
             }
         }
         
@@ -146,102 +162,7 @@ jobs:
             }
         }
         
-        // AVFoundation compatibility
-        class AVAudioTime {
-            static func now() -> AVAudioTime { return AVAudioTime() }
-            var sampleTime: Int64 { return 0 }
-            var sampleRate: Double { return 44100.0 }
-        }
-        
-        typealias AVAudioFramePosition = Int64
-        
-        class AVAudioEngine {
-            let mainMixerNode = AVAudioMixerNode()
-            let outputNode = AVAudioOutputNode()
-            func connect(_ node1: AVAudioNode, to node2: AVAudioNode, format: AVAudioFormat?) {}
-            func prepare() {}
-            func start() throws {}
-            func stop() {}
-            func reset() {}
-            func attachNode(_ node: AVAudioNode) {}
-            func detachNode(_ node: AVAudioNode) {}
-        }
-        
-        class AVAudioNode: NSObject {}
-        
-        class AVAudioMixerNode: AVAudioNode {
-            var volume: Float = 1.0
-        }
-        
-        class AVAudioOutputNode: AVAudioNode {}
-        
-        class AVAudioPlayerNode: AVAudioNode {
-            func scheduleBuffer(_ buffer: AVAudioPCMBuffer, at time: AVAudioTime?, options: AVAudioPlayerNodeBufferOptions = []) {}
-            func scheduleBuffer(_ buffer: AVAudioPCMBuffer, completionHandler: AVAudioNodeCompletionHandler? = nil) {}
-            func play(at time: AVAudioTime? = nil) {}
-            func stop() {}
-            func pause() {}
-            var isPlaying: Bool { return false }
-            func nodeTime(forPlayerTime playerTime: AVAudioTime) -> AVAudioTime? { return nil }
-            func playerTime(forNodeTime nodeTime: AVAudioTime) -> AVAudioTime? { return nil }
-        }
-        
-        typealias AVAudioNodeCompletionHandler = () -> Void
-        
-        struct AVAudioPlayerNodeBufferOptions: OptionSet {
-            let rawValue: UInt
-            init(rawValue: UInt) { self.rawValue = rawValue }
-            static let loops = AVAudioPlayerNodeBufferOptions(rawValue: 1 << 0)
-            static let interrupts = AVAudioPlayerNodeBufferOptions(rawValue: 1 << 1)
-            static let interruptsAtLoop = AVAudioPlayerNodeBufferOptions(rawValue: 1 << 2)
-        }
-        
-        class AVAudioFormat: NSObject {
-            init?(commonFormat: AVAudioCommonFormat, sampleRate: Double, channels: AVAudioChannelCount, interleaved: Bool) {}
-            var sampleRate: Double { return 44100.0 }
-            var channelCount: AVAudioChannelCount { return 2 }
-        }
-        
-        typealias AVAudioChannelCount = UInt32
-        
-        enum AVAudioCommonFormat: UInt {
-            case pcmFormatFloat32 = 1
-            case pcmFormatFloat64 = 2
-            case pcmFormatInt16 = 3
-            case pcmFormatInt32 = 4
-        }
-        
-        class AVAudioPCMBuffer: NSObject {
-            init?(format: AVAudioFormat, frameCapacity: AVAudioFrameCount) { super.init() }
-            var frameLength: AVAudioFrameCount = 0
-            var format: AVAudioFormat { return AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 44100, channels: 2, interleaved: false)! }
-        }
-        
-        typealias AVAudioFrameCount = UInt32
-        
-        class AVAudioUnitTimePitch: AVAudioNode {
-            var pitch: Float = 0.0
-            var rate: Float = 1.0
-        }
-        
-        class AVAudioUnitVarispeed: AVAudioNode {
-            var rate: Float = 1.0
-        }
-        
-        // Display link compatibility
-        class CADisplayLink {
-            static func createDisplayLink(withTarget target: Any, selector: Selector) -> Any {
-                return NSObject()
-            }
-            
-            convenience init(target: Any, selector: Selector) {
-                self.init()
-            }
-            
-            func add(to runloop: Any, forMode mode: Any) {}
-            func invalidate() {}
-        }
-
+        // MediaPlayer compatibility
         class MPVolumeView: NSView {}
         class MPNowPlayingInfoCenter: NSObject {
             static let `default` = MPNowPlayingInfoCenter()
@@ -266,321 +187,60 @@ jobs:
         #endif
         EOF
         
-    - name: Create view representable stubs
-      run: |
-        mkdir -p TypeBeat/CI
-        cat > TypeBeat/CI/ViewRepresentableStubs.swift << 'EOF'
-        #if os(macOS)
-        import SwiftUI
-        
-        // Create stubs for the specific view representables that are causing issues
-        extension AudioOutputPicker: NSViewRepresentable {
-            func makeNSView(context: NSViewRepresentableContext<AudioOutputPicker>) -> NSView {
-                return NSView()
-            }
-            
-            func updateNSView(_ nsView: NSView, context: NSViewRepresentableContext<AudioOutputPicker>) {
-                // No-op
-            }
-        }
-        
-        extension DismissableScrollView: NSViewRepresentable {
-            func makeNSView(context: NSViewRepresentableContext<DismissableScrollView>) -> NSView {
-                return NSView()
-            }
-            
-            func updateNSView(_ nsView: NSView, context: NSViewRepresentableContext<DismissableScrollView>) {
-                // No-op
-            }
-        }
-        #endif
-        EOF
-        
-    - name: Create xcconfig for CI
-      run: |
+        # Create xcconfig file
         cat > ci.xcconfig << 'EOF'
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS = CI_BUILD
-        MACOSX_DEPLOYMENT_TARGET = 14.0
         IPHONEOS_DEPLOYMENT_TARGET = 16.0
+        MACOSX_DEPLOYMENT_TARGET = 14.0
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS = CI_BUILD
         EOF
         
-    - name: Create simple test file
-      run: |
-        mkdir -p TypeBeatTests
-        cat > TypeBeatTests/SimpleCITests.swift << 'EOF'
-        import XCTest
-        @testable import TypeBeat
-
-        class SimpleCITests: XCTestCase {
-            func testBasicFunctionality() {
-                XCTAssertTrue(true, "This test should always pass")
-                print("Basic test passed successfully")
-            }
-            
-            func testAppInitialization() {
-                // Just verify we can create basic app objects without crashing
-                let appState = AppState()
-                XCTAssertNotNil(appState, "AppState should initialize")
-                print("App initialization test passed")
-            }
-        }
-        EOF
-        
-    - name: List available schemes
-      run: |
-        xcodebuild -project TypeBeat.xcodeproj -list
-        
-    - name: Fix platform-specific imports
+    - name: Fix Import Statements
       run: |
         # Remove any existing import modifications first
         find TypeBeat -name "*.swift" -type f -exec sed -i '' '/^import "TypeBeat\/CI\/CrossPlatformImports.swift"/d' {} \;
         
         # Add proper conditional imports at the top of each file
-        find TypeBeat -name "*.swift" -type f -not -path "*/CI/*" -exec sed -i '' '1s/^/import SwiftUI\n#if os(macOS)\n@_exported import Foundation\n#endif\n\n/' {} \;
-        
-        # Fix UIKit imports
-        find TypeBeat -name "*.swift" -type f -exec grep -l "import UIKit" {} \; | while read file; do
-          echo "Fixing imports in $file"
-          sed -i '' 's/import UIKit/import SwiftUI\n#if os(iOS)\nimport UIKit\n#endif/' "$file"
-        done
+        find TypeBeat -name "*.swift" -type f -not -path "*/CI/*" -exec sed -i '' '1s/^/#if os(iOS)\nimport UIKit\n#else\nimport AppKit\n#endif\nimport SwiftUI\n\n/' {} \;
         
         # Fix AVFoundation imports
         find TypeBeat -name "*.swift" -type f -exec grep -l "import AVFoundation" {} \; | while read file; do
           echo "Fixing AVFoundation imports in $file"
-          sed -i '' 's/import AVFoundation/import SwiftUI\n#if os(iOS)\nimport AVFoundation\n#else\n\/\/ AVFoundation compatibility provided by TypeBeat\/CI\/CrossPlatformImports.swift\n#endif/' "$file"
+          sed -i '' 's/import AVFoundation/import AVFoundation\n#if os(macOS)\n\/\/ Using compatibility layer\n#endif/' "$file"
         done
         
         # Fix MediaPlayer imports
         find TypeBeat -name "*.swift" -type f -exec grep -l "import MediaPlayer" {} \; | while read file; do
           echo "Fixing MediaPlayer imports in $file"
-          sed -i '' 's/import MediaPlayer/import SwiftUI\n#if os(iOS)\nimport MediaPlayer\n#endif/' "$file"
+          sed -i '' 's/import MediaPlayer/import MediaPlayer\n#if os(macOS)\n\/\/ Using compatibility layer\n#endif/' "$file"
         done
-        
-    - name: Create build directory
-      run: mkdir -p build
-        
-    - name: Build for CI
+      
+    - name: Build for Testing
       run: |
-        xcodebuild clean build \
-          -project TypeBeat.xcodeproj \
-          -scheme TypeBeat \
-          -destination "generic/platform=macOS" \
-          -xcconfig ci.xcconfig \
-          CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO \
-          SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
-          ONLY_ACTIVE_ARCH=YES \
-          GCC_PREPROCESSOR_DEFINITIONS="CI_BUILD=1" \
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS="CI_BUILD" \
-          OTHER_SWIFT_FLAGS="-Xfrontend -enable-cross-import-overlays" \
-          | tee build/build.log || true
-          
-    - name: Run tests with detailed logging
-      run: |
-        # First, build for testing to ensure test host is properly created
         xcodebuild build-for-testing \
           -project TypeBeat.xcodeproj \
-          -scheme TypeBeat \
-          -destination "platform=macOS" \
+          -scheme TypeBeatTests \
+          -destination platform=macOS \
           -sdk macosx \
           -configuration Debug \
           -xcconfig ci.xcconfig \
-          CODE_SIGN_IDENTITY="" \
+          CODE_SIGN_IDENTITY= \
           CODE_SIGNING_REQUIRED=NO \
           CODE_SIGNING_ALLOWED=NO \
           SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
           ONLY_ACTIVE_ARCH=YES \
-          GCC_PREPROCESSOR_DEFINITIONS="CI_BUILD=1" \
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS="CI_BUILD" \
-          OTHER_SWIFT_FLAGS="-Xfrontend -enable-cross-import-overlays" \
-          | tee build/build-for-testing.log || true
+          GCC_PREPROCESSOR_DEFINITIONS=CI_BUILD=1 \
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS=CI_BUILD \
+          "OTHER_SWIFT_FLAGS=-Xfrontend -enable-cross-import-overlays"
           
-        # Then run the tests with detailed logging
+    - name: Run Tests
+      run: |
         xcodebuild test-without-building \
           -project TypeBeat.xcodeproj \
-          -scheme TypeBeat \
-          -destination "platform=macOS" \
+          -scheme TypeBeatTests \
+          -destination platform=macOS \
           -sdk macosx \
           -configuration Debug \
           -xcconfig ci.xcconfig \
-          CODE_SIGN_IDENTITY="" \
+          CODE_SIGN_IDENTITY= \
           CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO \
-          SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
-          ONLY_ACTIVE_ARCH=YES \
-          GCC_PREPROCESSOR_DEFINITIONS="CI_BUILD=1" \
-          SWIFT_ACTIVE_COMPILATION_CONDITIONS="CI_BUILD" \
-          OTHER_SWIFT_FLAGS="-Xfrontend -enable-cross-import-overlays" \
-          -verbose \
-          | tee build/test.log || true
-          
-        # If test-without-building fails, try a simpler approach
-        if [ $? -ne 0 ]; then
-          echo "Falling back to simpler test approach..."
-          xcodebuild test \
-            -project TypeBeat.xcodeproj \
-            -scheme TypeBeat \
-            -destination "platform=macOS" \
-            -sdk macosx \
-            -configuration Debug \
-            -xcconfig ci.xcconfig \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
-            ONLY_ACTIVE_ARCH=YES \
-            GCC_PREPROCESSOR_DEFINITIONS="CI_BUILD=1" \
-            SWIFT_ACTIVE_COMPILATION_CONDITIONS="CI_BUILD" \
-            OTHER_SWIFT_FLAGS="-Xfrontend -enable-cross-import-overlays" \
-            -testPlan BasicTests \
-            | tee build/test-fallback.log || true
-        fi
-      
-    - name: Create build summary
-      run: |
-        mkdir -p build
-        echo "# Build and Test Summary" > ./build/summary.md
-        if grep -q "BUILD SUCCEEDED" build/build.log; then
-          echo "✅ Build completed successfully" >> ./build/summary.md
-        else
-          echo "❌ Build failed - see logs for details" >> ./build/summary.md
-          echo "### Common Issues" >> ./build/summary.md
-          echo "- iOS-specific APIs need platform-specific implementations" >> ./build/summary.md
-          echo "- Missing mock implementations in CrossPlatformImports.swift" >> ./build/summary.md
-          
-          # Extract specific errors for easier debugging
-          echo "### Build Errors" >> ./build/summary.md
-          grep -A 2 "error:" build/build.log | head -n 20 >> ./build/summary.md
-        fi
-        
-        if [ -f build/test.log ]; then
-          if grep -q "Test Suite.*passed" build/test.log; then
-            echo "✅ Tests passed successfully" >> ./build/summary.md
-            
-            # Extract test results
-            echo "### Test Results" >> ./build/summary.md
-            grep -A 1 "Test Suite.*passed" build/test.log >> ./build/summary.md
-          else
-            echo "❌ Tests failed - see logs for details" >> ./build/summary.md
-            
-            # Extract test failures
-            echo "### Test Failures" >> ./build/summary.md
-            grep -A 5 "failed with exit code" build/test.log >> ./build/summary.md
-          fi
-        fi
-        
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: build-artifacts
-        path: ./build
-        retention-days: 7
-
-    - name: Create CI test target
-      run: |
-        # Create a dedicated CI test target directory
-        mkdir -p CITests
-        
-        # Create a simple test file that doesn't depend on complex iOS features
-        cat > CITests/CIBasicTests.swift << 'EOF'
-        import XCTest
-
-        class CIBasicTests: XCTestCase {
-            func testTrueIsTrue() {
-                XCTAssertTrue(true, "This test should always pass")
-            }
-            
-            func testMathWorks() {
-                XCTAssertEqual(2 + 2, 4, "Basic math should work")
-            }
-            
-            func testStringComparison() {
-                XCTAssertEqual("hello", "hello", "String comparison should work")
-            }
-        }
-        EOF
-        
-        # Create a simple test target Info.plist
-        cat > CITests/Info.plist << 'EOF'
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0">
-        <dict>
-            <key>CFBundleDevelopmentRegion</key>
-            <string>en</string>
-            <key>CFBundleExecutable</key>
-            <string>$(EXECUTABLE_NAME)</string>
-            <key>CFBundleIdentifier</key>
-            <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-            <key>CFBundleInfoDictionaryVersion</key>
-            <string>6.0</string>
-            <key>CFBundleName</key>
-            <string>$(PRODUCT_NAME)</string>
-            <key>CFBundlePackageType</key>
-            <string>BNDL</string>
-            <key>CFBundleShortVersionString</key>
-            <string>1.0</string>
-            <key>CFBundleVersion</key>
-            <string>1</string>
-        </dict>
-        </plist>
-        EOF
-        
-    - name: Run standalone tests
-      run: |
-        # Create a simple standalone test runner
-        cat > run_tests.swift << 'EOF'
-        import XCTest
-
-        // Basic test class
-        class SimpleTests: XCTestCase {
-            func testBasicFunctionality() {
-                XCTAssertTrue(true, "This test should always pass")
-                print("Basic test passed successfully")
-            }
-            
-            func testMathWorks() {
-                XCTAssertEqual(2 + 2, 4, "Basic math should work")
-                print("Math test passed successfully")
-            }
-        }
-
-        // Run the tests
-        let testSuite = SimpleTests.defaultTestSuite
-        testSuite.run()
-        let result = testSuite.testRun!
-        
-        print("Tests completed: \(result.executionCount)")
-        print("Tests failed: \(result.failureCount)")
-        print("Tests succeeded: \(result.executionCount - result.failureCount)")
-        
-        // Exit with appropriate code
-        exit(result.failureCount > 0 ? 1 : 0)
-        EOF
-        
-        # Compile and run the standalone test
-        swiftc -o run_tests run_tests.swift
-        ./run_tests
-        
-        echo "Standalone tests completed successfully"
-        
-    - name: Create build summary
-      run: |
-        mkdir -p build
-        echo "# Build and Test Summary" > ./build/summary.md
-        echo "## Build Status" >> ./build/summary.md
-        
-        if [ -f build/build.log ] && grep -q "BUILD SUCCEEDED" build/build.log; then
-          echo "✅ Build completed successfully" >> ./build/summary.md
-        else
-          echo "❌ Build had issues - see logs for details" >> ./build/summary.md
-        fi
-        
-        echo "## Test Status" >> ./build/summary.md
-        echo "✅ Standalone tests completed successfully" >> ./build/summary.md
-        
-        echo "## Next Steps" >> ./build/summary.md
-        echo "- Continue improving CI compatibility layer" >> ./build/summary.md
-        echo "- Add more comprehensive tests once basic CI is stable" >> ./build/summary.md 
+          CODE_SIGNING_ALLOWED=NO 
