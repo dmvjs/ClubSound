@@ -41,7 +41,7 @@ jobs:
           echo "$SWIFT_FILES"
           
           # Use xcodebuild to check syntax only
-          xcodebuild clean build -project TypeBeat.xcodeproj -scheme "TypeBeat" -destination "platform=macOS" CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO -quiet -skipUnavailableActions -syntax-check
+          xcodebuild clean build -project TypeBeat.xcodeproj -scheme "TypeBeat" -destination "platform=macOS" CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO -quiet -skipUnavailableActions
           
           echo "Swift compilation check completed successfully"
         else
