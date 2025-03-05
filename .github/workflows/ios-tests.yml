@@ -69,12 +69,15 @@ jobs:
           sed -i '' 's/import UIKit/import SwiftUI\n#if os(iOS)\nimport UIKit\n#endif/' "$file"
         done
         
+    - name: Create build directory
+      run: mkdir -p build
+        
     - name: Build and Test
       run: |
         xcodebuild clean test \
           -project TypeBeat.xcodeproj \
           -scheme TypeBeatTests \
-          -destination "platform=macOS,arch=arm64" \
+          -destination "platform=macOS" \
           -xcconfig ci.xcconfig \
           CODE_SIGN_IDENTITY="" \
           CODE_SIGNING_REQUIRED=NO \
@@ -84,9 +87,6 @@ jobs:
           GCC_PREPROCESSOR_DEFINITIONS="CI_BUILD=1" \
           | tee build/test.log
       
-    - name: Create build directory
-      run: mkdir -p build
-        
     - name: Create build summary
       run: |
         mkdir -p build
