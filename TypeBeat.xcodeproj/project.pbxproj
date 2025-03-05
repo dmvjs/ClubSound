@@ -54,26 +54,18 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Tests/AudioManagerTests.swift,
+				Tests/AudioSyncDriftTests.swift,
 				Tests/AudioTimingTests.swift,
 			);
 			target = 4F9713DE2D62C23A00996AC9 /* TypeBeatTests */;
-		};
-		4F97143E2D62D8BC00996AC9 /* Exceptions for "TypeBeat" folder in "TypeBeatUITests" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				TypeBeatUITests/TypeBeatUITests.swift,
-				TypeBeatUITests/TypeBeatUITestsLaunchTests.swift,
-			);
-			target = 4F97142B2D62D87B00996AC9 /* TypeBeatUITests */;
 		};
 		4FC6217A2D0A272200AC7034 /* Exceptions for "TypeBeat" folder in "TypeBeat" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 				Tests/AudioManagerTests.swift,
+				Tests/AudioSyncDriftTests.swift,
 				Tests/AudioTimingTests.swift,
-				TypeBeatUITests/TypeBeatUITests.swift,
-				TypeBeatUITests/TypeBeatUITestsLaunchTests.swift,
 			);
 			target = 4F497EFA2CF9648C003DA4FE /* TypeBeat */;
 		};
@@ -85,7 +77,6 @@
 			exceptions = (
 				4FC6217A2D0A272200AC7034 /* Exceptions for "TypeBeat" folder in "TypeBeat" target */,
 				4F9713E92D62C25E00996AC9 /* Exceptions for "TypeBeat" folder in "TypeBeatTests" target */,
-				4F97143E2D62D8BC00996AC9 /* Exceptions for "TypeBeat" folder in "TypeBeatUITests" target */,
 			);
 			path = TypeBeat;
 			sourceTree = "<group>";
