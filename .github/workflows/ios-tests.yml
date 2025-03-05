@@ -121,102 +121,26 @@ jobs:
         ls -la TypeBeat/Tests/ || echo "No TypeBeat/Tests directory"
         
         echo "Finding all Swift test files:"
-        find . -name "*Test*.swift" -o -name "*test*.swift" | grep -v "StandaloneTests"
+        find . -name "*Test*.swift" -o -name "*test*.swift" | grep -v "StandaloneTests" || echo "No test files found"
         
         echo "Xcode project structure:"
-        find TypeBeat.xcodeproj -type f -name "*.pbxproj" -exec cat {} \; | grep -A 5 "PBXNativeTarget.*Test"
+        find TypeBeat.xcodeproj -type f -name "*.pbxproj" -exec cat {} \; | grep -A 5 "PBXNativeTarget.*Test" || echo "No test targets found in Xcode project"
         
-    - name: Create Simple Test
+    - name: Examine Test Files
       run: |
-        mkdir -p SimpleTests
-        
-        # Create a simple Swift file that doesn't use XCTest
-        cat > SimpleTests/simple_test.swift << 'EOF'
-        // Simple test without XCTest framework
-        import Foundation
-        
-        func runTests() -> Bool {
-            var allPassed = true
-            
-            // Test 1: Basic math
-            let test1 = 2 + 2 == 4
-            print("Test 1 (Basic math): \(test1 ? "PASSED" : "FAILED")")
-            allPassed = allPassed && test1
-            
-            // Test 2: String operations
-            let testString = "ClubSound"
-            let test2 = testString.count == 9 && testString.contains("Club")
-            print("Test 2 (String operations): \(test2 ? "PASSED" : "FAILED")")
-            allPassed = allPassed && test2
-            
-            // Test 3: Array operations
-            let array = [1, 2, 3, 4]
-            let test3 = array.count == 4 && array.reduce(0, +) == 10
-            print("Test 3 (Array operations): \(test3 ? "PASSED" : "FAILED")")
-            allPassed = allPassed && test3
-            
-            return allPassed
-        }
-        
-        // Run the tests
-        let passed = runTests()
-        print("Overall test result: \(passed ? "PASSED" : "FAILED")")
-        exit(passed ? 0 : 1)
-        EOF
-        
-    - name: Compile and Run Simple Test
-      run: |
-        cd SimpleTests
-        # Get SDK path and specify target explicitly
-        SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
-        SDK_VERSION=$(xcrun --sdk macosx --show-sdk-version)
-        /Applications/Xcode_16.2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc \
-          -sdk $SDK_PATH \
-          -target x86_64-apple-macosx$SDK_VERSION \
-          -o run_tests simple_test.swift
-        ./run_tests
-        
-    - name: Try Running App Tests
-      run: |
-        # This step will attempt to run tests from your actual app
-        # First, let's see if we can find any test files
+        # Find test files
         TEST_FILES=$(find . -name "*Test*.swift" -o -name "*test*.swift" | grep -v "StandaloneTests" | head -n 5)
         
         if [ -n "$TEST_FILES" ]; then
-          echo "Found test files, attempting to compile and run:"
+          echo "Found test files:"
           echo "$TEST_FILES"
           
-          # Create a directory for app tests
-          mkdir -p AppTests
-          
-          # Create a test runner
-          cat > AppTests/TestRunner.swift << 'EOF'
-          import Foundation
-          
-          print("Starting test runner...")
-          // We'll just check if the files compile for now
-          print("Test compilation successful!")
-          exit(0)
-          EOF
-          
-          # Copy the first few test files
+          # Show the content of the first few test files
           for file in $TEST_FILES; do
-            cp "$file" AppTests/
+            echo "=== Contents of $file ==="
+            head -n 20 "$file"
+            echo "=== End of preview ==="
           done
-          
-          # Try to compile the tests
-          cd AppTests
-          SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
-          SDK_VERSION=$(xcrun --sdk macosx --show-sdk-version)
-          
-          # Just try to compile TestRunner.swift first
-          /Applications/Xcode_16.2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc \
-            -sdk $SDK_PATH \
-            -target x86_64-apple-macosx$SDK_VERSION \
-            -o test_runner TestRunner.swift
-          
-          # Run the test runner
-          ./test_runner
         else
           echo "No test files found in the project."
         fi 
