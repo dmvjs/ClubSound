@@ -28,6 +28,9 @@ jobs:
             -project TypeBeat.xcodeproj \
             -scheme TypeBeat \
             -destination 'platform=macOS,arch=arm64' \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
             | xcbeautify
         env:
           DEVELOPER_DIR: /Applications/Xcode_16.2.app/Contents/Developer
