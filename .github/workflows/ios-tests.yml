@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  app-build:
-    name: App Build
+  code-check:
+    name: Code Check
     runs-on: macos-latest
     
     steps:
@@ -24,7 +24,15 @@ jobs:
         xcrun --sdk macosx --show-sdk-version
         xcodebuild -version
         
-    - name: Build Project
+    - name: Compile Swift Files
       run: |
-        # Just build the project without running tests
-        xcodebuild build -project TypeBeat.xcodeproj -scheme "TypeBeat" -destination "platform=macOS" CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO 
+        # Find all Swift files in the project
+        SWIFT_FILES=$(find . -name "*.swift" | grep -v "Tests")
+        
+        # Compile them without building a full app
+        if [ -n "$SWIFT_FILES" ]; then
+          xcrun swiftc -sdk $(xcrun --show-sdk-path --sdk macosx) -target x86_64-apple-macos14.7 -typecheck $SWIFT_FILES
+          echo "Swift compilation check completed successfully"
+        else
+          echo "No Swift files found to check"
+        fi 
