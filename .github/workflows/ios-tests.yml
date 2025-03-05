@@ -36,7 +36,9 @@ jobs:
         typealias UIScreen = NSScreen
         
         // UIApplication compatibility
-        typealias UIApplicationDelegate = NSApplicationDelegate
+        protocol UIApplicationDelegate: NSApplicationDelegate {
+            func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool
+        }
         
         class UIApplication {
             static let shared = UIApplication()
@@ -44,6 +46,7 @@ jobs:
             struct LaunchOptionsKey: RawRepresentable, Hashable {
                 let rawValue: String
                 init(rawValue: String) { self.rawValue = rawValue }
+                static let blankKey = LaunchOptionsKey(rawValue: "blank")
             }
             
             func open(_ url: URL, options: [String: Any] = [:], completionHandler: ((Bool) -> Void)? = nil) {
@@ -55,10 +58,10 @@ jobs:
         }
         
         // UIScrollView compatibility
-        class UIScrollView: NSScrollView {
+        class MyUIScrollView: NSScrollView {
             var contentOffset: CGPoint = .zero
-            var contentSize: CGSize = .zero
-            var contentInset: NSEdgeInsets = .zero
+            var _contentSize: CGSize = .zero
+            var contentInset: NSEdgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
             var delegate: Any?
             var isScrollEnabled: Bool = true
             var showsHorizontalScrollIndicator: Bool = true
@@ -73,23 +76,14 @@ jobs:
                 contentOffset = offset
             }
         }
+        typealias UIScrollView = MyUIScrollView
         
         // View representable protocols
         protocol UIViewRepresentable {
             associatedtype UIViewType
             func makeUIView(context: Context) -> UIViewType
             func updateUIView(_ uiView: UIViewType, context: Context)
-            typealias Context = NSViewRepresentableContext<Self>
-        }
-        
-        extension UIViewRepresentable where Self: NSViewRepresentable, UIViewType == NSViewType {
-            func makeNSView(context: NSViewRepresentableContext<Self>) -> NSViewType {
-                return makeUIView(context: context as! Context)
-            }
-            
-            func updateNSView(_ nsView: NSViewType, context: NSViewRepresentableContext<Self>) {
-                updateUIView(nsView, context: context as! Context)
-            }
+            typealias Context = NSViewRepresentableContext<NSViewRepresentable>
         }
         
         // AVFoundation compatibility
@@ -113,48 +107,57 @@ jobs:
             func detachNode(_ node: AVAudioNode) {}
         }
         
-        class AVAudioNode {
-            var engine: AVAudioEngine? { return nil }
-            var lastRenderTime: AVAudioTime? { return nil }
-            func reset() {}
-        }
-        
-        class AVAudioPlayerNode: AVAudioNode {
-            func scheduleBuffer(_ buffer: AVAudioPCMBuffer, at time: AVAudioTime?, options: AVAudioPlayerNodeBufferOptions, completionHandler: (() -> Void)?) {}
-            func scheduleBuffer(_ buffer: AVAudioPCMBuffer, completionHandler: (() -> Void)?) {}
-            func play() {}
-            func play(at time: AVAudioTime?) {}
-            func stop() {}
-            func pause() {}
-            var isPlaying: Bool { return false }
-            var volume: Float = 1.0
-            var rate: Float = 1.0
-        }
+        class AVAudioNode: NSObject {}
         
         class AVAudioMixerNode: AVAudioNode {
             var volume: Float = 1.0
         }
         
-        class AVAudioPCMBuffer {
-            init(pcmFormat format: AVAudioFormat, frameCapacity: AVAudioFrameCount) {}
-            var frameLength: AVAudioFrameCount = 0
+        class AVAudioOutputNode: AVAudioNode {}
+        
+        class AVAudioPlayerNode: AVAudioNode {
+            func scheduleBuffer(_ buffer: AVAudioPCMBuffer, at time: AVAudioTime?, options: AVAudioPlayerNodeBufferOptions = []) {}
+            func scheduleBuffer(_ buffer: AVAudioPCMBuffer, completionHandler: AVAudioNodeCompletionHandler? = nil) {}
+            func play(at time: AVAudioTime? = nil) {}
+            func stop() {}
+            func pause() {}
+            var isPlaying: Bool { return false }
+            func nodeTime(forPlayerTime playerTime: AVAudioTime) -> AVAudioTime? { return nil }
+            func playerTime(forNodeTime nodeTime: AVAudioTime) -> AVAudioTime? { return nil }
         }
         
-        typealias AVAudioFrameCount = UInt32
-        
-        class AVAudioFormat {
-            init(standardFormatWithSampleRate sampleRate: Double, channels: AVAudioChannelCount) {}
-        }
-        
-        typealias AVAudioChannelCount = UInt32
+        typealias AVAudioNodeCompletionHandler = () -> Void
         
         struct AVAudioPlayerNodeBufferOptions: OptionSet {
             let rawValue: UInt
             init(rawValue: UInt) { self.rawValue = rawValue }
-            static let loops = AVAudioPlayerNodeBufferOptions(rawValue: 1)
+            static let loops = AVAudioPlayerNodeBufferOptions(rawValue: 1 << 0)
+            static let interrupts = AVAudioPlayerNodeBufferOptions(rawValue: 1 << 1)
+            static let interruptsAtLoop = AVAudioPlayerNodeBufferOptions(rawValue: 1 << 2)
         }
         
-        class AVAudioOutputNode: AVAudioNode {}
+        class AVAudioFormat: NSObject {
+            init?(commonFormat: AVAudioCommonFormat, sampleRate: Double, channels: AVAudioChannelCount, interleaved: Bool) {}
+            var sampleRate: Double { return 44100.0 }
+            var channelCount: AVAudioChannelCount { return 2 }
+        }
+        
+        typealias AVAudioChannelCount = UInt32
+        
+        enum AVAudioCommonFormat: UInt {
+            case pcmFormatFloat32 = 1
+            case pcmFormatFloat64 = 2
+            case pcmFormatInt16 = 3
+            case pcmFormatInt32 = 4
+        }
+        
+        class AVAudioPCMBuffer: NSObject {
+            init?(format: AVAudioFormat, frameCapacity: AVAudioFrameCount) { super.init() }
+            var frameLength: AVAudioFrameCount = 0
+            var format: AVAudioFormat { return AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 44100, channels: 2, interleaved: false)! }
+        }
+        
+        typealias AVAudioFrameCount = UInt32
         
         class AVAudioUnitTimePitch: AVAudioNode {
             var pitch: Float = 0.0
@@ -165,13 +168,11 @@ jobs:
             var rate: Float = 1.0
         }
         
-        class AVAudioSession {
+        class AVAudioSession: NSObject {
             static func sharedInstance() -> AVAudioSession { return AVAudioSession() }
             
             enum Category: String {
-                case playback = "playback"
-                case record = "record"
-                case playAndRecord = "playAndRecord"
+                case ambient, soloAmbient, playback, record, playAndRecord, multiRoute
             }
             
             enum CategoryOptions: UInt {
@@ -181,54 +182,43 @@ jobs:
                 case defaultToSpeaker = 8
             }
             
-            func setCategory(_ category: Category, options: CategoryOptions) throws {}
-            func setActive(_ active: Bool) throws {}
+            func setCategory(_ category: Category, options: CategoryOptions = []) throws {}
+            func setActive(_ active: Bool, options: UInt = 0) throws {}
             
             var outputVolume: Float { return 1.0 }
             
-            struct RouteChangeReason: RawRepresentable {
-                let rawValue: UInt
-                init(rawValue: UInt) { self.rawValue = rawValue }
-                static let newDeviceAvailable = RouteChangeReason(rawValue: 1)
-                static let oldDeviceUnavailable = RouteChangeReason(rawValue: 2)
-                static let categoryChange = RouteChangeReason(rawValue: 3)
+            struct RouteChangeNotification {
+                static let notification = NSNotification.Name("AVAudioSessionRouteChangeNotification")
+                static let reasonKey = "AVAudioSessionRouteChangeReasonKey"
+                static let previousRouteKey = "AVAudioSessionPreviousRouteKey"
+            }
+            
+            enum RouteChangeReason: UInt {
+                case unknown = 0
+                case newDeviceAvailable = 1
+                case oldDeviceUnavailable = 2
+                case categoryChange = 3
+                case override = 4
+                case wakeFromSleep = 6
+                case noSuitableRouteForCategory = 7
+                case routeConfigurationChange = 8
             }
             
             struct Port {
-                let uid: String
-                let type: PortType
-                
-                struct PortType: RawRepresentable {
-                    let rawValue: String
-                    init(rawValue: String) { self.rawValue = rawValue }
-                    static let builtInSpeaker = PortType(rawValue: "Speaker")
-                    static let headphones = PortType(rawValue: "Headphones")
-                    static let bluetoothA2DP = PortType(rawValue: "BluetoothA2DP")
-                }
+                let portName: String
+                let portType: String
             }
             
-            struct RouteDescription {
+            struct Route {
+                let inputs: [Port]
                 let outputs: [Port]
             }
             
-            var currentRoute: RouteDescription {
-                return RouteDescription(outputs: [])
+            var currentRoute: Route {
+                return Route(inputs: [], outputs: [Port(portName: "Default", portType: "Output")])
             }
         }
-
-        // System colors compatibility
-        extension Color {
-            static func systemGray4() -> Color { Color(NSColor.systemGray) }
-            static func systemGray6() -> Color { Color(NSColor.windowBackgroundColor) }
-        }
-
-        // Haptic feedback compatibility
-        class UIImpactFeedbackGenerator {
-            enum FeedbackStyle { case light, medium, heavy }
-            init(style: FeedbackStyle) {}
-            func impactOccurred() {}
-        }
-
+        
         // Display link compatibility
         class CADisplayLink {
             static func createDisplayLink(withTarget target: Any, selector: Selector) -> Any {
