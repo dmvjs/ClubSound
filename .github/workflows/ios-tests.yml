@@ -24,7 +24,7 @@ jobs:
       
       - name: Build for testing
         run: |
-          xcodebuild build-for-testing \
+          xcodebuild build \
             -project TypeBeat.xcodeproj \
             -scheme TypeBeat \
             -destination 'platform=macOS,arch=arm64' \
