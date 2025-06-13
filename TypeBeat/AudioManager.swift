@@ -197,6 +197,10 @@ class AudioManager: ObservableObject {
             // Set preferred values for better audio quality
             try session.setPreferredSampleRate(48000)
             try session.setPreferredIOBufferDuration(0.005)
+            
+            // Set maximum buffer size to prevent underruns
+            let maxBufferSize = 4096
+            try session.setPreferredIOBufferDuration(Double(maxBufferSize) / 48000.0)
         } catch {
             print("Failed to setup audio session: \(error)")
         }
@@ -344,6 +348,9 @@ class AudioManager: ObservableObject {
     }
     
     private func setupEngine() {
+        // Stop engine before making changes
+        engine.stop()
+        
         // Create a compressor for the main mix
         let compressor = AVAudioUnitEffect(audioComponentDescription: AudioComponentDescription(
             componentType: kAudioUnitType_Effect,
@@ -355,8 +362,12 @@ class AudioManager: ObservableObject {
         
         // Attach and connect compressor
         engine.attach(compressor)
-        engine.connect(engine.mainMixerNode, to: compressor, format: nil)
-        engine.connect(compressor, to: engine.outputNode, format: nil)
+        
+        // Use consistent high-quality format throughout the chain
+        let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!
+        
+        engine.connect(engine.mainMixerNode, to: compressor, format: format)
+        engine.connect(compressor, to: engine.outputNode, format: format)
         
         do {
             try engine.start()
@@ -644,6 +655,9 @@ class AudioManager: ObservableObject {
         let isPhantom = sample.id == phantomSampleId
         
         do {
+            // Stop engine before making changes
+            engine.pause()
+            
             // Create and configure nodes
             let player = AVAudioPlayerNode()
             let mixer = AVAudioMixerNode()
@@ -703,12 +717,15 @@ class AudioManager: ObservableObject {
             engine.attach(timePitch)
             engine.attach(eq)
             
+            // Use consistent high-quality format throughout the chain
+            let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2)!
+            
             // Connect nodes with enhanced processing chain
-            engine.connect(player, to: varispeed, format: buffer.format)
-            engine.connect(varispeed, to: timePitch, format: buffer.format)
-            engine.connect(timePitch, to: eq, format: buffer.format)
-            engine.connect(eq, to: mixer, format: buffer.format)
-            engine.connect(mixer, to: engine.mainMixerNode, format: buffer.format)
+            engine.connect(player, to: varispeed, format: format)
+            engine.connect(varispeed, to: timePitch, format: format)
+            engine.connect(timePitch, to: eq, format: format)
+            engine.connect(eq, to: mixer, format: format)
+            engine.connect(mixer, to: engine.mainMixerNode, format: format)
             
             // Store references
             players[sample.id] = player
@@ -730,11 +747,12 @@ class AudioManager: ObservableObject {
                 let isFirstSong = activeSamples.count == 1
                 let initialVolume: Float = isFirstSong ? 0.666 : 0.0
                 
-                // Set volume after a slight delay to prevent clicks
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    mixer.outputVolume = initialVolume
-                }
+                // Ramp volume smoothly to prevent clicks
+                rampVolume(for: mixer, from: 0.0, to: initialVolume, duration: 0.1)
             }
+            
+            // Restart engine
+            try engine.start()
             
             // If playing, sync with master clock
             if isPlaying, let masterStartTime = masterStartTime {
@@ -774,15 +792,17 @@ class AudioManager: ObservableObject {
         } catch {
             print("Error adding sample: \(error)")
         }
+    }
+
+    // Add this helper function for smooth volume ramping
+    private func rampVolume(for mixer: AVAudioMixerNode, from startVolume: Float, to endVolume: Float, duration: TimeInterval) {
+        let steps = 20
+        let stepDuration = duration / Double(steps)
+        let volumeStep = (endVolume - startVolume) / Float(steps)
         
-        // If we're playing and this isn't the phantom sample, perform the hack
-        if isPlaying && !isPhantom && !isPerformingPhantomSync {
-            // Wait a moment for this sample to start playing
-            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
-            
-            // Perform the phantom sync hack
-            DispatchQueue.main.async { [weak self] in
-                self?.performPhantomSyncHack()
+        for step in 0...steps {
+            DispatchQueue.main.asyncAfter(deadline: .now() + stepDuration * Double(step)) {
+                mixer.outputVolume = startVolume + (volumeStep * Float(step))
             }
         }
     }

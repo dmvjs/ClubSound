@@ -49,6 +49,8 @@ struct ControlButtonGroup: View {
             .scaleEffect(audioManager.isPlaying ? 1.0 : breatheScale)
             .shadow(color: .black.opacity(0.3), radius: 7, x: 0, y: 4)
         }
+        .disabled(audioManager.activeSamples.isEmpty)
+        .opacity(audioManager.activeSamples.isEmpty ? 0.5 : 1.0)
         .accessibilityLabel(audioManager.isPlaying ? "stop".localized : "play".localized)
         .accessibilityIdentifier("play-button")
         .animation(.easeInOut, value: audioManager.isPlaying)
