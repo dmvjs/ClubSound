@@ -46,6 +46,7 @@
 		4F497EFB2CF9648C003DA4FE /* TypeBeat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TypeBeat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4F9713DF2D62C23A00996AC9 /* TypeBeatTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TypeBeatTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4F97142C2D62D87B00996AC9 /* TypeBeatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TypeBeatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4FBA904E2DFC94E900125822 /* TypeBeat.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; path = TypeBeat.xctestplan; sourceTree = "<group>"; };
 		4FC39BC32CF96B0B00458DB7 /* ColorExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorExtensions.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -120,6 +121,7 @@
 		4F497EF22CF9648C003DA4FE = {
 			isa = PBXGroup;
 			children = (
+				4FBA904E2DFC94E900125822 /* TypeBeat.xctestplan */,
 				4F497EFD2CF9648C003DA4FE /* TypeBeat */,
 				4F2A85752D03F023000EDAC9 /* Frameworks */,
 				4F497EFC2CF9648C003DA4FE /* Products */,

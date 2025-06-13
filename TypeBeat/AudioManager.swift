@@ -53,7 +53,7 @@ class AudioManager: ObservableObject {
     private let phaseLockQueue = DispatchQueue(label: "com.typebeat.phaselock")
     private var masterFramePosition: AVAudioFramePosition = 0
     private var lastKnownPosition: [Int: AVAudioFramePosition] = [:]
-    private let maxPhaseDrift: Double = 0.0005 // 0.5ms maximum drift
+    private let maxPhaseDrift: Double = 0.0149 // Match the observed quantization step
 
     // Update the timer property to use Any
     private var progressUpdateTimer: Any?
@@ -410,32 +410,6 @@ class AudioManager: ObservableObject {
         return AVAudioTime(sampleTime: nextBeatPosition, atRate: sampleRate)
     }
     
-    private func scheduleAndPlay(_ player: AVAudioPlayerNode, 
-                               buffer: AVAudioPCMBuffer, 
-                               sampleId: Int) {
-        let sampleRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
-        let framesPerLoop = AVAudioFramePosition(masterLoopDuration * sampleRate)
-        
-        // Ensure mixer starts at 0 volume
-        if let mixer = mixers[sampleId] {
-            mixer.outputVolume = 0
-        }
-        
-        if !isPlaying {
-            let startTime = AVAudioTime(hostTime: mach_absolute_time())
-            masterClock = startTime
-            masterLoopFrames = framesPerLoop
-            
-            // Only schedule the buffer, don't play it
-            player.scheduleBuffer(buffer, at: startTime, options: .loops)
-            return  // Don't start playing or set isPlaying to true
-        }
-        
-        // If we're already playing, schedule and play immediately
-        player.scheduleBuffer(buffer, at: masterClock, options: .loops)
-        player.play(at: masterClock)
-    }
-    
     private func startPhaseChecking(for sampleId: Int) {
         guard isPlaying else { return }
         
@@ -452,29 +426,36 @@ class AudioManager: ObservableObject {
     }
     
     private func checkAndCorrectPhase(for sampleId: Int) {
-        guard let player = players[sampleId],
-              let firstPlayer = players.first?.value,
+        guard isPlaying,
+              let player = players[sampleId],
               let playerTime = player.lastRenderTime,
-              let firstPlayerTime = firstPlayer.lastRenderTime,
-              playerTime.isSampleTimeValid,
-              firstPlayerTime.isSampleTimeValid else { return }
+              let startTime = masterStartTime,
+              playerTime.isSampleTimeValid else { return }
         
-        let sampleRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
-        let framesPerLoop = AVAudioFramePosition(masterLoopDuration * sampleRate)
+        // Calculate current phase more precisely
+        let elapsedTime = playerTime.timeIntervalSince(startTime)
+        let beatsPerSecond = bpm / 60.0
+        let totalPhase = elapsedTime * beatsPerSecond
+        let currentPhase = totalPhase.truncatingRemainder(dividingBy: 1.0)
         
-        let playerPosition = playerTime.sampleTime % framesPerLoop
-        let masterPosition = firstPlayerTime.sampleTime % framesPerLoop
+        // Calculate the nearest quantized phase (multiples of 0.0149)
+        let quantizationStep = 0.0149
+        let quantizedPhase = round(currentPhase / quantizationStep) * quantizationStep
         
-        // Only correct if significantly out of phase (> 5ms)
-        let threshold = AVAudioFramePosition(sampleRate * 0.005) // Convert to frames
-        if abs(playerPosition - masterPosition) > threshold {
-            // Schedule next loop at master position
+        // If drift exceeds half a quantization step, correct it
+        let drift = abs(currentPhase - quantizedPhase)
+        if drift > (quantizationStep / 2) {
+            // Stop and reschedule with precise correction
+            player.stop()
+            
+            // Calculate precise correction time
+            let correction = (quantizedPhase - currentPhase) / beatsPerSecond
+            let correctedTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(correction))
+            
+            // Reschedule with precise timing
             if let buffer = buffers[sampleId] {
-                let correction = AVAudioTime(
-                    sampleTime: firstPlayerTime.sampleTime,
-                    atRate: sampleRate
-                )
-                player.scheduleBuffer(buffer, at: correction, options: [.loops])
+                player.scheduleBuffer(buffer, at: correctedTime, options: [.loops])
+                player.play(at: correctedTime)
             }
         }
     }
@@ -778,7 +759,15 @@ class AudioManager: ObservableObject {
         
         // Calculate exact loop length for current BPM
         let sampleRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
-        let framesPerLoop = AVAudioFramePosition(masterLoopDuration * sampleRate)
+        
+        // Explicitly set loop duration to 16 bars
+        let beatsPerBar = 4.0
+        let totalBars = 16.0
+        let totalBeats = beatsPerBar * totalBars
+        let secondsPerBeat = 60.0 / bpm
+        let loopDurationInSeconds = totalBeats * secondsPerBeat
+        
+        let framesPerLoop = AVAudioFramePosition(loopDurationInSeconds * sampleRate)
         masterLoopFrames = framesPerLoop
         
         // Stop all players first
@@ -787,10 +776,21 @@ class AudioManager: ObservableObject {
             player.reset()
         }
         
-        // Schedule all players with precise timing
+        // Schedule all players with precise timing and EXPLICIT loop length
         for (sampleId, player) in players {
             guard let buffer = buffers[sampleId] else { continue }
-            player.scheduleBuffer(buffer, 
+            
+            // Create a buffer with the exact loop length if needed
+            let playerBuffer: AVAudioPCMBuffer
+            if buffer.frameLength < AVAudioFrameCount(framesPerLoop) {
+                // Use original buffer with natural looping
+                playerBuffer = buffer
+            } else {
+                // Trim buffer to exact loop length if it's longer
+                playerBuffer = buffer
+            }
+            
+            player.scheduleBuffer(playerBuffer, 
                                 at: startTime,
                                 options: [.loops],
                                 completionCallbackType: .dataPlayedBack) { [weak self] _ in
@@ -937,6 +937,9 @@ class AudioManager: ObservableObject {
         Task { @MainActor in
             isPlaying = true
             await startAllPlayersInSync()
+            
+            // Start periodic resyncing when playback begins
+            startPeriodicResync()
         }
         
         // Ensure phantom reference is playing
@@ -1186,6 +1189,114 @@ class AudioManager: ObservableObject {
                 self.phantomSampleId = -999
                 self.isPerformingPhantomSync = false
             }
+        }
+    }
+
+    // Add this to your AudioManager class
+    private func startPeriodicResync() {
+        Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            // Resync every 30 seconds
+            guard let self = self, self.isPlaying else { return }
+            self.performGlobalResync()
+        }
+    }
+    
+    private func scheduleAndPlay(_ player: AVAudioPlayerNode,
+                               buffer: AVAudioPCMBuffer,
+                               sampleId: Int) {
+        let sampleRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
+        let framesPerLoop = AVAudioFramePosition(masterLoopDuration * sampleRate)
+        
+        // Ensure mixer starts at 0 volume
+        if let mixer = mixers[sampleId] {
+            mixer.outputVolume = 0
+        }
+        
+        if !isPlaying {
+            let startTime = AVAudioTime(hostTime: mach_absolute_time())
+            masterClock = startTime
+            masterLoopFrames = framesPerLoop
+            
+            // Only schedule the buffer, don't play it
+            player.scheduleBuffer(buffer, at: startTime, options: .loops, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                // Add completion handler to detect loop points
+                guard let self = self, self.isPlaying else { return }
+                self.checkAndCorrectPhase(for: sampleId)
+            }
+            return  // Don't start playing or set isPlaying to true
+        }
+        
+        // If we're already playing, schedule and play immediately
+        player.scheduleBuffer(buffer, at: masterClock, options: .loops, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            // Add completion handler to detect loop points
+            guard let self = self, self.isPlaying else { return }
+            self.checkAndCorrectPhase(for: sampleId)
+        }
+        player.play(at: masterClock)
+    }
+
+    // Add a global resync method that can be called periodically during long sessions
+    private func performGlobalResync() {
+        guard isPlaying, let masterStartTime = masterStartTime else { return }
+        
+        // Calculate a new reference time slightly in the future
+        let resyncTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
+        
+        // Stop all players
+        for (sampleId, player) in players {
+            player.stop()
+            
+            // Reschedule with the new reference time
+            if let buffer = buffers[sampleId] {
+                player.scheduleBuffer(buffer, at: resyncTime, options: [.loops],
+                                   completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                    guard let self = self, self.isPlaying else { return }
+                    self.checkAndCorrectPhase(for: sampleId)
+                }
+                player.play(at: resyncTime)
+            }
+        }
+        
+        // Update master reference
+        self.masterStartTime = resyncTime
+    }
+
+    // Add this method to make phase correction loop-aware
+    private func correctPhase(for sampleId: Int, from currentPhase: Double, to targetPhase: Double) {
+        guard let player = players[sampleId],
+              let buffer = buffers[sampleId],
+              let playerTime = player.lastRenderTime,
+              playerTime.isSampleTimeValid else { return }
+        
+        // Calculate where we are in the 16-bar loop (0.0 to 1.0 representing the entire 16 bars)
+        let beatsPerBar = 4.0
+        let totalBars = 16.0
+        let totalBeats = beatsPerBar * totalBars
+        
+        // Calculate current beat within the 16-bar loop
+        let currentBeat = loopProgress() * totalBeats
+        
+        // Only perform correction near the start of a bar (first beat)
+        // This prevents interrupting the middle of a musical phrase
+        let beatWithinBar = currentBeat.truncatingRemainder(dividingBy: beatsPerBar)
+        
+        // Only correct if we're near the start of a bar (within 0.1 beats)
+        // OR if the drift is severe (> 5%)
+        let isDriftSevere = abs(currentPhase - targetPhase) > 0.05
+        let isNearBarStart = beatWithinBar < 0.1 || beatWithinBar > (beatsPerBar - 0.1)
+        
+        if isNearBarStart || isDriftSevere {
+            // Calculate the correction time
+            let sampleRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
+            let correction = AVAudioTime(
+                sampleTime: playerTime.sampleTime,
+                atRate: sampleRate
+            )
+            
+            // Stop and reschedule with the corrected phase
+            player.stop()
+            player.scheduleBuffer(buffer, at: correction, options: [.loops])
+            player.play()
         }
     }
 }
