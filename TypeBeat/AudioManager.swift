@@ -717,13 +717,22 @@ class AudioManager: ObservableObject {
             timePitchNodes[sample.id] = timePitch
             buffers[sample.id] = buffer
             
+            // Update activeSamples first
+            await MainActor.run {
+                activeSamples.insert(sample.id)
+            }
+            
             // If this is the phantom sample, keep volume at zero
             if isPhantom {
                 mixer.outputVolume = 0.0
             } else {
-                // Otherwise set to normal volume (after a slight delay to prevent clicks)
+                // Set initial volume based on whether this is the first song
+                let isFirstSong = activeSamples.count == 1
+                let initialVolume: Float = isFirstSong ? 0.666 : 0.0
+                
+                // Set volume after a slight delay to prevent clicks
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                    mixer.outputVolume = 0.0 
+                    mixer.outputVolume = initialVolume
                 }
             }
             
@@ -761,10 +770,6 @@ class AudioManager: ObservableObject {
             
             // Double-check rate adjustment
             adjustPlaybackRates(for: sample)
-            
-            await MainActor.run {
-                activeSamples.insert(sample.id)
-            }
             
         } catch {
             print("Error adding sample: \(error)")

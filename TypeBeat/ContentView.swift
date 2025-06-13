@@ -138,8 +138,10 @@ struct ContentView: View {
 
     private func addToNowPlaying(sample: Sample) {
         if nowPlaying.count < 4 && !nowPlaying.contains(where: { $0.id == sample.id }) {
-            // Set initial volume to zero
-            sampleVolumes[sample.id] = 0.0
+            // Set initial volume based on whether this is the first song
+            let isFirstSong = nowPlaying.isEmpty
+            let initialVolume: Float = isFirstSong ? 0.666 : 0.0
+            sampleVolumes[sample.id] = initialVolume
             
             // Add to UI first
             DispatchQueue.main.async {
@@ -153,7 +155,7 @@ struct ContentView: View {
                 
                 // Set volume on main thread
                 await MainActor.run {
-                    self.audioManager.setVolume(for: sample, volume: 0.0)
+                    self.audioManager.setVolume(for: sample, volume: initialVolume)
                     self.audioManager.objectWillChange.send()
                 }
             }
