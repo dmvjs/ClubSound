@@ -1,10 +1,16 @@
+@preconcurrency import AVFAudio
 import Foundation
 import AVFoundation
 import Combine
 import SwiftUI
+import AudioToolbox
 
+@MainActor
 class AudioManager: ObservableObject {
     static let shared = AudioManager()
+    
+    // Add missing constant
+    private let kAudioUnitSubType_MatrixReverb: UInt32 = 0x6D617472 // 'matr'
     
     // Add samples array as a property
     private let samples: [Sample] = TypeBeat.samples
@@ -338,7 +344,19 @@ class AudioManager: ObservableObject {
     }
     
     private func setupEngine() {
-        engine.connect(engine.mainMixerNode, to: engine.outputNode, format: nil)
+        // Create a compressor for the main mix
+        let compressor = AVAudioUnitEffect(audioComponentDescription: AudioComponentDescription(
+            componentType: kAudioUnitType_Effect,
+            componentSubType: kAudioUnitSubType_DynamicsProcessor,
+            componentManufacturer: kAudioUnitManufacturer_Apple,
+            componentFlags: 0,
+            componentFlagsMask: 0
+        ))
+        
+        // Attach and connect compressor
+        engine.attach(compressor)
+        engine.connect(engine.mainMixerNode, to: compressor, format: nil)
+        engine.connect(compressor, to: engine.outputNode, format: nil)
         
         do {
             try engine.start()
@@ -632,6 +650,24 @@ class AudioManager: ObservableObject {
             let varispeed = AVAudioUnitVarispeed()
             let timePitch = AVAudioUnitTimePitch()
             
+            // Add EQ for arena-like enhancement
+            let eq = AVAudioUnitEQ(numberOfBands: 3)
+            // High shelf for air and sparkle
+            eq.bands[0].filterType = .highShelf
+            eq.bands[0].frequency = 8000 // 8kHz for more air
+            eq.bands[0].gain = 3.0 // 3dB boost
+            eq.bands[0].bandwidth = 0.5
+            // Presence boost for clarity
+            eq.bands[1].filterType = .parametric
+            eq.bands[1].frequency = 3000 // 3kHz for presence
+            eq.bands[1].gain = 2.0 // 2dB boost
+            eq.bands[1].bandwidth = 1.0
+            // Low-mid boost for warmth
+            eq.bands[2].filterType = .parametric
+            eq.bands[2].frequency = 200 // 200Hz for warmth
+            eq.bands[2].gain = 1.5 // 1.5dB boost
+            eq.bands[2].bandwidth = 0.5
+            
             // Force volume to zero initially
             mixer.outputVolume = 0.0
             
@@ -665,11 +701,13 @@ class AudioManager: ObservableObject {
             engine.attach(mixer)
             engine.attach(varispeed)
             engine.attach(timePitch)
+            engine.attach(eq)
             
-            // Connect everything
+            // Connect nodes with enhanced processing chain
             engine.connect(player, to: varispeed, format: buffer.format)
             engine.connect(varispeed, to: timePitch, format: buffer.format)
-            engine.connect(timePitch, to: mixer, format: buffer.format)
+            engine.connect(timePitch, to: eq, format: buffer.format)
+            engine.connect(eq, to: mixer, format: buffer.format)
             engine.connect(mixer, to: engine.mainMixerNode, format: buffer.format)
             
             // Store references
@@ -956,14 +994,11 @@ class AudioManager: ObservableObject {
             // Stop sync monitoring first
             stopSyncMonitoring()
             
-            // Stop all players on background thread
-            await Task.detached(priority: .userInitiated) {
-                // Stop all players
-                for player in self.players.values {
-                    player.stop()
-                    player.reset()
-                }
-            }.value
+            // Stop all players
+            for player in players.values {
+                player.stop()
+                player.reset()
+            }
             
             // Reset master state
             masterStartTime = nil
@@ -1370,7 +1405,7 @@ extension AVAudioTime {
     }
 }
 
-func changeLanguage(to language: String) {
+@MainActor func changeLanguage(to language: String) {
     // Stop all playback first
     AudioManager.shared.stopAllPlayers()
     
