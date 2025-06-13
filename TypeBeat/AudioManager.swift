@@ -91,6 +91,7 @@ class AudioManager: ObservableObject {
     private init() {
         setupAudioSession()
         setupEngine()
+        setupInterruptionHandling()
         
         // Initialize master clock with a small delay for setup
         masterClock = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
@@ -181,17 +182,158 @@ class AudioManager: ObservableObject {
     
     private func setupAudioSession() {
         do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setPreferredSampleRate(48000)
-            try audioSession.setPreferredIOBufferDuration(0.005)
-            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
-            try audioSession.setActive(true)
+            let session = AVAudioSession.sharedInstance()
+            // Use .playback category with .mixWithOthers to allow mixing with other apps
+            // and .duckOthers to lower volume of other apps when we play
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
+            try session.setActive(true)
+            
+            // Set preferred values for better audio quality
+            try session.setPreferredSampleRate(48000)
+            try session.setPreferredIOBufferDuration(0.005)
         } catch {
-            // Log error in detail for debugging and consider a fallback or alert
-            print("❌ Failed to set up audio session: \(error.localizedDescription)")
-            #if DEBUG
-            assertionFailure("Audio session setup failed!")
-            #endif
+            print("Failed to setup audio session: \(error)")
+        }
+    }
+    
+    private func setupInterruptionHandling() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleInterruption),
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+        
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleRouteChange),
+            name: AVAudioSession.routeChangeNotification,
+            object: nil
+        )
+        
+        // Add observer for audio session activation
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioSessionActivation),
+            name: AVAudioSession.mediaServicesWereResetNotification,
+            object: nil
+        )
+    }
+    
+    @objc private func handleInterruption(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            return
+        }
+        
+        switch type {
+        case .began:
+            // Interruption began (phone call, other app, etc.)
+            Task { @MainActor in
+                // Store current state
+                let wasPlaying = isPlaying
+                isPlaying = false
+                stopAllPlayers()
+                
+                // Store state for resumption
+                UserDefaults.standard.set(wasPlaying, forKey: "WasPlayingBeforeInterruption")
+            }
+        case .ended:
+            guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else { return }
+            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+            
+            if options.contains(.shouldResume) {
+                // Interruption ended - try to resume
+                Task { @MainActor in
+                    // Reconfigure audio session
+                    do {
+                        try AVAudioSession.sharedInstance().setActive(true)
+                        try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
+                        
+                        // Restart engine if needed
+                        if !engine.isRunning {
+                            try engine.start()
+                        }
+                        
+                        // Check if we should resume playback
+                        let shouldResume = UserDefaults.standard.bool(forKey: "WasPlayingBeforeInterruption")
+                        if shouldResume {
+                            play()
+                        }
+                    } catch {
+                        print("Failed to resume audio session: \(error)")
+                    }
+                }
+            }
+        @unknown default:
+            break
+        }
+    }
+    
+    @objc private func handleAudioSessionActivation(notification: Notification) {
+        // Handle audio session reset (e.g., when audio is interrupted by system)
+        Task { @MainActor in
+            do {
+                // Reconfigure audio session
+                try AVAudioSession.sharedInstance().setActive(true)
+                try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
+                
+                // Restart engine
+                engine.stop()
+                engine.prepare()
+                try engine.start()
+                
+                // Check if we should resume playback
+                let shouldResume = UserDefaults.standard.bool(forKey: "WasPlayingBeforeInterruption")
+                if shouldResume {
+                    play()
+                }
+            } catch {
+                print("Failed to handle audio session activation: \(error)")
+            }
+        }
+    }
+    
+    @objc private func handleRouteChange(notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let reasonValue = userInfo[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
+            return
+        }
+        
+        switch reason {
+        case .oldDeviceUnavailable:
+            // Headphones unplugged or call ended
+            Task { @MainActor in
+                let wasPlaying = isPlaying
+                isPlaying = false
+                stopAllPlayers()
+                UserDefaults.standard.set(wasPlaying, forKey: "WasPlayingBeforeInterruption")
+            }
+        case .newDeviceAvailable:
+            // New audio device connected
+            Task { @MainActor in
+                do {
+                    try AVAudioSession.sharedInstance().setActive(true)
+                    try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
+                    
+                    // Restart engine if needed
+                    if !engine.isRunning {
+                        try engine.start()
+                    }
+                    
+                    // Check if we should resume playback
+                    let shouldResume = UserDefaults.standard.bool(forKey: "WasPlayingBeforeInterruption")
+                    if shouldResume {
+                        play()
+                    }
+                } catch {
+                    print("Failed to handle route change: \(error)")
+                }
+            }
+        default:
+            break
         }
     }
     
