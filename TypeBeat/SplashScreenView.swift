@@ -45,16 +45,18 @@ struct SplashScreenView: View {
         Color(red: 1.00, green: 0.30, blue: 0.30)    // back to red
     ]
 
-    /// Chrome bevel — alternating highlights and shadows down the cap.
-    private var chromeGradient: LinearGradient {
+    /// Brushed metallic gold — warm highlights to deep shadows down the cap,
+    /// less saturated than the inner rainbow bands so it reads as the shell
+    /// containing them, not another rainbow ring.
+    private var metallicGoldGradient: LinearGradient {
         LinearGradient(
             stops: [
-                .init(color: Color(white: 1.00), location: 0.00),
-                .init(color: Color(white: 0.80), location: 0.20),
-                .init(color: Color(white: 0.55), location: 0.45),
-                .init(color: Color(white: 0.85), location: 0.60),
-                .init(color: Color(white: 0.45), location: 0.85),
-                .init(color: Color(white: 0.95), location: 1.00)
+                .init(color: Color(red: 0.98, green: 0.88, blue: 0.55), location: 0.00),  // bright gold top
+                .init(color: Color(red: 0.82, green: 0.68, blue: 0.32), location: 0.22),
+                .init(color: Color(red: 0.50, green: 0.38, blue: 0.15), location: 0.48),  // shadow trough
+                .init(color: Color(red: 0.88, green: 0.74, blue: 0.40), location: 0.62),  // highlight bounce
+                .init(color: Color(red: 0.40, green: 0.30, blue: 0.10), location: 0.85),  // deep shadow
+                .init(color: Color(red: 0.92, green: 0.80, blue: 0.50), location: 1.00)   // rim highlight
             ],
             startPoint: .top,
             endPoint: .bottom
@@ -98,44 +100,46 @@ struct SplashScreenView: View {
                         .blur(radius: 50)
                         .opacity(glowOpacity * 0.65)
 
-                    // Chrome shell — the thick silver outer ring
+                    // Outer ring — metallic gold shell, the widest stroke.
+                    // Sits ~10pt thicker than ring 1 on each side for a clear
+                    // visible border around the colored interior.
                     InfinityShape()
                         .trim(from: 0, to: trimEnd)
                         .stroke(
-                            chromeGradient,
-                            style: StrokeStyle(lineWidth: 54, lineCap: .round, lineJoin: .round)
+                            metallicGoldGradient,
+                            style: StrokeStyle(lineWidth: 68, lineCap: .round, lineJoin: .round)
                         )
 
-                    // Ring 1 — first rainbow band inside the chrome
+                    // Inner ring 1 — widest rainbow band (outermost color)
                     InfinityShape()
                         .trim(from: 0, to: trimEnd)
                         .stroke(
                             ringGradient(angleOffset: 0, animatedAngle: angle),
-                            style: StrokeStyle(lineWidth: 42, lineCap: .round, lineJoin: .round)
+                            style: StrokeStyle(lineWidth: 48, lineCap: .round, lineJoin: .round)
                         )
 
-                    // Ring 2 — second rainbow band, hue-offset
+                    // Inner ring 2 — middle rainbow band
                     InfinityShape()
                         .trim(from: 0, to: trimEnd)
                         .stroke(
-                            ringGradient(angleOffset: 72, animatedAngle: angle),
+                            ringGradient(angleOffset: 90, animatedAngle: angle),
                             style: StrokeStyle(lineWidth: 30, lineCap: .round, lineJoin: .round)
                         )
 
-                    // Ring 3 — third rainbow band
+                    // Inner ring 3 — innermost rainbow band
                     InfinityShape()
                         .trim(from: 0, to: trimEnd)
                         .stroke(
-                            ringGradient(angleOffset: 144, animatedAngle: angle),
-                            style: StrokeStyle(lineWidth: 18, lineCap: .round, lineJoin: .round)
+                            ringGradient(angleOffset: 180, animatedAngle: angle),
+                            style: StrokeStyle(lineWidth: 14, lineCap: .round, lineJoin: .round)
                         )
 
                     // Core glint — thin bright highlight riding the center
                     InfinityShape()
                         .trim(from: 0, to: trimEnd)
                         .stroke(
-                            ringGradient(angleOffset: 216, animatedAngle: angle),
-                            style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                            ringGradient(angleOffset: 270, animatedAngle: angle),
+                            style: StrokeStyle(lineWidth: 4, lineCap: .round)
                         )
                         .blendMode(.screen)
                         .opacity(0.95)
