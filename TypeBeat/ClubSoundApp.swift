@@ -6,7 +6,7 @@ struct LooperApp: App {
 
     var body: some Scene {
         WindowGroup {
-            SplashScreenView()
+            ContentView(audioManager: .shared)
                 .id(language)
                 .environment(\.locale, Locale(identifier: language))
                 .onAppear(perform: setFallbackBackgroundColor)
