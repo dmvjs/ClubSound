@@ -56,7 +56,7 @@ struct SampleScrollView: View {
     private func keyHeader(for key: MusicKey, samples: [Sample]) -> some View {
         Text(key.localizedName)
             .font(.system(size: 12, weight: .heavy))
-            .foregroundColor(keyColor(for: key))
+            .foregroundColor(key.color)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -73,21 +73,6 @@ struct SampleScrollView: View {
         }
     }
     
-    // MARK: - Helpers
-    private func getKeyName(for key: Int) -> String {
-        let keyNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-        return keyNames[key % 12]
-    }
-    
-    private func keyColor(for key: MusicKey) -> Color {
-        Sample(id: 0, title: "", key: key, bpm: 0, fileName: "").keyColor()
-    }
-    
-    private func sectionHeader(bpm: Double, key: MusicKey) -> String {
-        let bpmText = "section.bpm".localized(with: Int(bpm))
-        let keyText = "section.key".localized(with: key.localizedName)
-        return "\(bpmText) - \(keyText)"
-    }
 }
 
 // MARK: - SafeArea Environment Key

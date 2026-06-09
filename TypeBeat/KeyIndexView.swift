@@ -95,8 +95,3 @@ struct KeyIndexView: View {
     }
 }
 
-extension MusicKey {
-    var color: Color {
-        Sample(id: 0, title: "", key: self, bpm: 0, fileName: "").keyColor()
-    }
-}

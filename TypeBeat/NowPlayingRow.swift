@@ -6,7 +6,6 @@ struct NowPlayingRow: View {
     let sample: Sample
     @Binding var volume: Float
     let remove: () -> Void
-    let keyColor: Color
     @ObservedObject var audioManager: AudioManager
     
     @State private var progress: Double = 0
@@ -22,7 +21,7 @@ struct NowPlayingRow: View {
                 
                 Circle()
                     .trim(from: 0, to: CGFloat(progress))
-                    .stroke(sample.keyColor(), lineWidth: 3)
+                    .stroke(sample.key.color, lineWidth: 3)
                     .rotationEffect(.degrees(-90))
                     .accessibilityValue(String(format: "%.2f", progress))
                     .accessibilityIdentifier("progress-ring-\(sample.id)")
@@ -38,7 +37,7 @@ struct NowPlayingRow: View {
                     .overlay(
                         Text("\(sample.bpm, specifier: "%.0f")")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(sample.keyColor())
+                            .foregroundColor(sample.key.color)
                     )
             }
             .frame(width: 39, height: 39)
@@ -60,7 +59,7 @@ struct NowPlayingRow: View {
 
             // Volume Slider
             Slider(value: $volume, in: 0...1)
-                .accentColor(sample.keyColor())
+                .accentColor(sample.key.color)
                 .frame(width: 150)
                 .padding(8)
                 .accessibilityIdentifier("Volume Slider")
