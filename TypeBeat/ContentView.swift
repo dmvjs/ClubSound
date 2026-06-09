@@ -108,9 +108,12 @@ struct ContentView: View {
                                 onSelection: { bpm in handleBPMSelection(bpm, proxy) }
                             )
                             .zIndex(2)
-                            Spacer(minLength: 0)
                         }
                         .padding(.trailing, 6)
+                        // Lift the scrubber columns above the now-playing strip
+                        // (master volume + per-song tabs) so they sit just over
+                        // the top of the volume tab rather than overlapping it.
+                        .padding(.bottom, bottomReserveForScrubbers)
                     }
                     .background(Color.black)
                 }
@@ -130,6 +133,18 @@ struct ContentView: View {
 
     private func isInPlaylist(_ sample: Sample) -> Bool {
         audioManager.activeSamples.contains { $0.id == sample.id }
+    }
+
+    /// Height to reserve at the bottom of the scrubber column so it sits
+    /// just above the master-volume tab instead of overlapping the
+    /// now-playing strip. Scales with how many songs are loaded.
+    private var bottomReserveForScrubbers: CGFloat {
+        let controlRow: CGFloat = 64
+        let mainVolume: CGFloat = audioManager.activeSamples.isEmpty ? 0 : 56
+        let perSongRow: CGFloat = 56
+        let songRows = CGFloat(audioManager.activeSamples.count) * perSongRow
+        let buffer: CGFloat = 12
+        return controlRow + mainVolume + songRows + buffer
     }
 
     private func handleBPMSelection(_ bpm: Double, _ proxy: ScrollViewProxy) {
