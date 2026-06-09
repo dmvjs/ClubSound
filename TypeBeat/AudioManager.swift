@@ -11,7 +11,10 @@ final class AudioManager {
 
     var activeSamples: Set<Int> = []
     var bpm: Double = 84.0 {
-        didSet { updateMasterClock() }
+        didSet {
+            adjustAllPlaybackRates()
+            if isPlaying { startAllPlayersInSync() }
+        }
     }
 
     var pitchLock: Bool = false {
@@ -19,11 +22,7 @@ final class AudioManager {
     }
 
     var isPlaying: Bool = false
-    var isEngineReady: Bool = false
 
-    // Master Clock
-    private var masterClock: AVAudioTime?
-    private var masterLoopFrames: AVAudioFramePosition = 0
     private let beatsPerBar = 4.0
     private let totalBars = 16.0
     private var masterLoopDuration: TimeInterval {
@@ -51,10 +50,6 @@ final class AudioManager {
     private init() {
         setupAudioSession()
         setupEngine()
-
-        masterClock = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
-        masterLoopFrames = AVAudioFramePosition(masterLoopDuration * sampleRate)
-
         engine.prepare()
         try? engine.start()
     }
@@ -86,70 +81,13 @@ final class AudioManager {
 
     private func setupEngine() {
         engine.connect(engine.mainMixerNode, to: engine.outputNode, format: nil)
-
-        do {
-            try engine.start()
-            isEngineReady = true
-        } catch {
-            print("Failed to start audio engine: \(error)")
-        }
-    }
-
-    private func updateMasterClock() {
-        guard let currentMasterClock = masterClock else {
-            masterClock = AVAudioTime(hostTime: mach_absolute_time())
-            return
-        }
-
-        let currentTime = AVAudioTime(hostTime: mach_absolute_time())
-        let elapsedTime = currentTime.timeIntervalSince(currentMasterClock)
-        let currentPhase = elapsedTime.truncatingRemainder(dividingBy: masterLoopDuration)
-
-        masterClock = currentTime.offset(seconds: -currentPhase)
-        masterLoopFrames = AVAudioFramePosition(masterLoopDuration * sampleRate)
-
-        if isPlaying {
-            let nextBeatTime = calculatePreciseStartTime()
-
-            for (sampleId, player) in players {
-                guard let buffer = buffers[sampleId] else { continue }
-                player.scheduleBuffer(buffer,
-                                      at: nextBeatTime,
-                                      options: [.loops, .interruptsAtLoop],
-                                      completionHandler: nil)
-                if let sample = samples.first(where: { $0.id == sampleId }) {
-                    adjustPlaybackRates(for: sample)
-                }
-            }
-        }
+        try? engine.start()
     }
 
     func loopProgress() -> Double {
-        guard isPlaying,
-              masterClock != nil,
-              let startTime = masterStartTime else { return 0.0 }
-
-        let currentTime = AVAudioTime(hostTime: mach_absolute_time())
-        let elapsedTime = currentTime.timeIntervalSince(startTime)
-
-        let rawProgress = elapsedTime.truncatingRemainder(dividingBy: masterLoopDuration) / masterLoopDuration
-
-        if rawProgress > 0.99 { return 1.0 }
-        if rawProgress < 0.01 { return 0.0 }
-        return rawProgress
-    }
-
-    private func calculatePreciseStartTime() -> AVAudioTime {
-        guard let currentTime = engine.outputNode.lastRenderTime,
-              currentTime.isSampleTimeValid else {
-            return AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
-        }
-
-        let sampleRate = engine.outputNode.outputFormat(forBus: 0).sampleRate
-        let currentPosition = currentTime.sampleTime
-        let samplesPerBeat = AVAudioFramePosition(sampleRate * 60.0 / bpm)
-        let nextBeatPosition = currentPosition + (samplesPerBeat - (currentPosition % samplesPerBeat))
-        return AVAudioTime(sampleTime: nextBeatPosition, atRate: sampleRate)
+        guard isPlaying, let startTime = masterStartTime else { return 0.0 }
+        let elapsed = AVAudioTime(hostTime: mach_absolute_time()).timeIntervalSince(startTime)
+        return elapsed.truncatingRemainder(dividingBy: masterLoopDuration) / masterLoopDuration
     }
 
     func addSampleToPlay(_ sample: Sample) async {
@@ -295,10 +233,6 @@ final class AudioManager {
         engine.mainMixerNode.outputVolume = volume
     }
 
-    func togglePitchLockWithoutRestart() {
-        pitchLock.toggle()
-    }
-
     private func adjustAllPlaybackRates() {
         for sampleId in players.keys {
             if let sample = samples.first(where: { $0.id == sampleId }) {
@@ -360,19 +294,14 @@ final class AudioManager {
         let startTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
         masterStartTime = startTime
 
-        let framesPerLoop = AVAudioFramePosition(masterLoopDuration * sampleRate)
-        masterLoopFrames = framesPerLoop
-
         for player in players.values {
             player.stop()
             player.reset()
         }
-
         for (sampleId, player) in players {
             guard let buffer = buffers[sampleId] else { continue }
             player.scheduleBuffer(buffer, at: startTime, options: [.loops], completionHandler: nil)
         }
-
         for player in players.values {
             player.play()
         }
@@ -398,14 +327,6 @@ final class AudioManager {
         let nanos = seconds * Double(NSEC_PER_SEC)
         return UInt64(nanos * Double(timebase.denom) / Double(timebase.numer))
     }
-
-    func updateBPM(to newBPM: Double) {
-        bpm = newBPM
-        if isPlaying {
-            startAllPlayersInSync()
-        }
-    }
-
 }
 
 // MARK: - Test hooks

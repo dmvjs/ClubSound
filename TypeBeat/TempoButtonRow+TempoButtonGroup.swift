@@ -7,7 +7,7 @@ struct TempoButtonGroup: View {
     var body: some View {
         ForEach([69, 84, 94, 102], id: \.self) { bpm in
             Button(action: {
-                audioManager.updateBPM(to: Double(bpm))
+                audioManager.bpm = Double(bpm)
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             }) {
                 bpmButtonLabel(for: bpm)

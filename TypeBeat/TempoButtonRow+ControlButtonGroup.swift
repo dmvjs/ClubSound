@@ -56,7 +56,7 @@ struct ControlButtonGroup: View {
     
     private var pitchLockButton: some View {
         Button(action: {
-            audioManager.togglePitchLockWithoutRestart()
+            audioManager.pitchLock.toggle()
         }) {
             Image(systemName: audioManager.pitchLock ? "lock.fill" : "lock.open")
                 .font(.system(size: buttonSize * 0.5))
