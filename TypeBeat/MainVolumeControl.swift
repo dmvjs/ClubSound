@@ -1,36 +1,27 @@
-//
-//  MainVolumeControl.swift
-//  ClubSound
-//
-//  Created by Kirk Elliott on 12/6/24.
-//
-
-
 import SwiftUI
 
 struct MainVolumeControl: View {
     @Binding var mainVolume: Float
     let audioManager: AudioManager
-    @State private var progress: Double = 0
-    
+
     var body: some View {
         HStack(spacing: 4) {
-            // BPM Circle with progress ring
             ZStack {
-                // Background track (iOS system gray)
+                // Background track
                 Circle()
                     .stroke(Color(.systemGray4), lineWidth: 2)
                     .frame(width: 39, height: 39)
-                
-                // Progress ring (iOS blue)
-                Circle()
-                    .trim(from: 0, to: CGFloat(progress))
-                    .stroke(Color.accentColor, lineWidth: 2)
-                    .rotationEffect(.degrees(-90))
-                    .frame(width: 39, height: 39)
-                    .animation(.linear(duration: 1/30), value: progress)
-                
-                // Center circle
+
+                // Progress ring — driven by the display link while playing.
+                TimelineView(.animation(paused: !audioManager.isPlaying)) { _ in
+                    Circle()
+                        .trim(from: 0, to: CGFloat(audioManager.loopProgress()))
+                        .stroke(Color.accentColor, lineWidth: 2)
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 39, height: 39)
+                }
+
+                // Center circle with BPM label
                 Circle()
                     .fill(Color(.secondarySystemBackground))
                     .frame(width: 35, height: 35)
@@ -41,9 +32,6 @@ struct MainVolumeControl: View {
                     )
             }
             .padding(5)
-            .onReceive(Timer.publish(every: 1/30, on: .main, in: .common).autoconnect()) { _ in
-                progress = audioManager.isPlaying ? audioManager.loopProgress() : 0
-            }
 
             Text("main.volume".localized)
                 .font(.subheadline)
@@ -55,7 +43,7 @@ struct MainVolumeControl: View {
             Slider(value: $mainVolume, in: 0...1)
                 .accentColor(.accentColor)
                 .frame(width: 150)
-                .onChange(of: mainVolume) { newValue, _ in
+                .onChange(of: mainVolume) { _, newValue in
                     audioManager.setMasterVolume(newValue)
                 }
                 .padding(8)
