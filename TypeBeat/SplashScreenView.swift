@@ -171,7 +171,7 @@ struct SplashScreenView: View {
                     .blendMode(.screen)
                     .opacity(markOpacity * 0.9)
                 }
-                .frame(width: 260, height: 145)
+                .frame(width: 260, height: 180)
             }
             .scaleEffect(markScale * breathScale)
             .rotationEffect(.degrees(markRotation))
