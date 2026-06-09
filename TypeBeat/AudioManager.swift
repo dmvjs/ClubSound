@@ -36,15 +36,15 @@ final class AudioManager {
     }
 
     private let engine = AVAudioEngine()
-    internal var players: [Int: AVAudioPlayerNode] = [:]
+    private var players: [Int: AVAudioPlayerNode] = [:]
     private var mixers: [Int: AVAudioMixerNode] = [:]
     private var varispeedNodes: [Int: AVAudioUnitVarispeed] = [:]
     private var timePitchNodes: [Int: AVAudioUnitTimePitch] = [:]
     private var buffers: [Int: AVAudioPCMBuffer] = [:]
 
-    internal var masterStartTime: AVAudioTime?
+    private var masterStartTime: AVAudioTime?
 
-    internal var masterLoopLength: AVAudioFramePosition {
+    private var masterLoopLength: AVAudioFramePosition {
         AVAudioFramePosition(masterLoopDuration * sampleRate)
     }
 
@@ -406,7 +406,19 @@ final class AudioManager {
         }
     }
 
-    // MARK: - Test hooks
+}
+
+// MARK: - Test hooks
+//
+// Test-only accessors. Gated to DEBUG so the production binary doesn't
+// ship them and so internal state stays private to production callers.
+// The test bundle is built in Debug, so these are available to XCTest.
+
+#if DEBUG
+extension AudioManager {
+    func testPlayer(for sampleId: Int) -> AVAudioPlayerNode? {
+        players[sampleId]
+    }
 
     func getPlaybackRate(for sample: Sample) -> Float {
         Float(bpm / sample.bpm)
@@ -428,6 +440,7 @@ final class AudioManager {
         varispeedNodes[sampleId]?.rate ?? 0
     }
 }
+#endif
 
 // MARK: - AVAudioTime helpers
 
