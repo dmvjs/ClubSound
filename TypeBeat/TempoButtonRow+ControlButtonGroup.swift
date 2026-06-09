@@ -76,7 +76,7 @@ struct ControlButtonGroup: View {
                 wakeLockManager.enableWakeLock()
             }
         } label: {
-            Image(systemName: wakeLockManager.isWakeLockEnabled ? "bolt.fill" : "bolt.slash")
+            Image(systemName: wakeLockManager.isWakeLockEnabled ? "sun.max.fill" : "sun.max")
                 .font(.system(size: buttonSize * 0.5))
                 .foregroundColor(wakeLockManager.isWakeLockEnabled ? .black : .white)
                 .frame(width: buttonSize, height: buttonSize)
