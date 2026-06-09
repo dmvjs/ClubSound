@@ -54,11 +54,11 @@ struct LanguageSelectionView: View {
 
     private func confirmLanguageChange() {
         guard let newLanguage = pendingLanguage else { return }
-        AudioManager.shared.reset()
         dismiss()
         // Let the sheet dismissal animate before triggering the root view
         // rebuild that the @AppStorage change causes (via .id(language) in
-        // ClubSoundApp).
+        // ClubSoundApp). The audio engine and AudioManager survive the
+        // rebuild, so playback continues uninterrupted.
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(300))
             language = newLanguage

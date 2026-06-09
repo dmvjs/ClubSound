@@ -17,6 +17,21 @@ final class AudioManager {
         didSet { adjustAllPlaybackRates() }
     }
     var isPlaying: Bool = false
+    var masterVolume: Float = 0.69 {
+        didSet { engine.mainMixerNode.outputVolume = masterVolume }
+    }
+
+    /// The samples currently in the now-playing strip, in the order they were
+    /// added. Views observe this directly; it survives view-tree rebuilds
+    /// (e.g. on language change) because it lives in the @MainActor singleton.
+    private(set) var activeSamples: [Sample] = []
+
+    /// Per-sample mixer volume (0...1), kept in sync with the mixer node so
+    /// view sliders survive view-tree rebuilds.
+    private(set) var volumes: [Int: Float] = [:]
+
+    /// Maximum number of simultaneously playing samples.
+    static let maxSimultaneousSamples = 4
 
     private let beatsPerBar = 4.0
     private let totalBars = 16.0
@@ -27,21 +42,32 @@ final class AudioManager {
     private let engine = AVAudioEngine()
     private var playing: [Int: PlayingSample] = [:]
 
-    /// The audio sample-clock position at which the current playback session
-    /// began. All timing (loop progress, phase-aligned insertion) is computed
-    /// against this single sample-time anchor so every decision uses the same
-    /// clock the audio thread renders on — no host-vs-sample drift.
+    /// Audio sample-clock position at which the current playback session
+    /// began. Elapsed-time queries (loopProgress, phase calculations) measure
+    /// against this — sample time doesn't drift relative to what the audio
+    /// thread is rendering, unlike host time.
     private var masterStartSample: AVAudioFramePosition?
-
-    /// 20ms expressed in frames at the engine's render rate — enough lead time
-    /// for the audio thread to pick up a schedule before it needs to render,
-    /// short enough to feel instant on tap.
-    private var scheduleLeadFrames: AVAudioFramePosition {
-        AVAudioFramePosition(sampleRate * 0.02)
-    }
 
     private var sampleRate: Double {
         engine.outputNode.outputFormat(forBus: 0).sampleRate
+    }
+
+    /// Captures a synchronized (host, sample) pair from the engine's last
+    /// render cycle, offset by `leadSeconds` into the future. Schedule via
+    /// the returned AVAudioTime (host-clock based — works for any node,
+    /// including fresh AVAudioPlayerNodes whose internal sample-time
+    /// timeline starts at zero); measure elapsed via the returned sample
+    /// position. Both reference the same render-cycle moment, so they're
+    /// internally consistent.
+    private func futureStart(leadSeconds: TimeInterval = 0.02)
+        -> (time: AVAudioTime, sample: AVAudioFramePosition)? {
+        guard let renderTime = engine.outputNode.lastRenderTime,
+              renderTime.isSampleTimeValid else { return nil }
+        let leadHost = AVAudioTime.hostTime(forSeconds: leadSeconds)
+        let leadFrames = AVAudioFramePosition(sampleRate * leadSeconds)
+        let time = AVAudioTime(hostTime: renderTime.hostTime + leadHost)
+        let sample = renderTime.sampleTime + leadFrames
+        return (time, sample)
     }
 
     private struct PlayingSample {
@@ -60,9 +86,7 @@ final class AudioManager {
         try? engine.start()
     }
 
-    /// Stops playback and removes every active sample. Used when the root
-    /// view tree is about to be torn down (e.g. on language change) so the
-    /// engine state and the view state stay consistent.
+    /// Stops playback and removes every active sample.
     func reset() {
         stopAllPlayers()
         for entry in playing.values {
@@ -72,6 +96,8 @@ final class AudioManager {
             engine.detach(entry.player)
         }
         playing.removeAll()
+        activeSamples.removeAll()
+        volumes.removeAll()
     }
 
     private func setupAudioSession() {
@@ -104,8 +130,22 @@ final class AudioManager {
     }
 
     func addSampleToPlay(_ sample: Sample) async {
+        // Enforce the 4-sample limit + dedup at the audio layer so views can't
+        // diverge from engine state.
+        guard activeSamples.count < Self.maxSimultaneousSamples,
+              !activeSamples.contains(where: { $0.id == sample.id }) else { return }
+
+        // Insert into the now-playing list immediately for snappy UI feedback;
+        // roll back if the audio file fails to load.
+        activeSamples.append(sample)
+        volumes[sample.id] = 0.0
+
         // File I/O happens off-main so we don't block the audio/UI thread.
-        guard let buffer = await Self.loadBuffer(for: sample) else { return }
+        guard let buffer = await Self.loadBuffer(for: sample) else {
+            activeSamples.removeAll { $0.id == sample.id }
+            volumes.removeValue(forKey: sample.id)
+            return
+        }
 
         let entry = PlayingSample(
             sample: sample,
@@ -175,20 +215,15 @@ final class AudioManager {
     /// hands off to a looping scheduleBuffer. Existing players are not touched —
     /// AVAudioEngine maintains their sample-accurate timing on its own.
     private func schedulePhaseAligned(entry: PlayingSample) {
-        guard let renderTime = engine.outputNode.lastRenderTime,
-              renderTime.isSampleTimeValid else { return }
-
-        let engineRate = sampleRate
-        let startSample = renderTime.sampleTime + scheduleLeadFrames
-        let startTime = AVAudioTime(sampleTime: startSample, atRate: engineRate)
+        guard let start = futureStart() else { return }
         let rate = bpm / entry.sample.bpm
 
         let buffer = entry.buffer
         let bufferFrames = AVAudioFramePosition(buffer.frameLength)
         var frameOffset: AVAudioFramePosition = 0
 
-        if let masterStartSample, startSample > masterStartSample {
-            let elapsed = Double(startSample - masterStartSample) / engineRate
+        if let masterStartSample, start.sample > masterStartSample {
+            let elapsed = Double(start.sample - masterStartSample) / sampleRate
             let bufferSampleRate = buffer.format.sampleRate
             let effectiveLoopDuration = Double(buffer.frameLength) / (bufferSampleRate * rate)
             let phaseInLoop = elapsed.truncatingRemainder(dividingBy: effectiveLoopDuration)
@@ -204,11 +239,11 @@ final class AudioManager {
                                         startingFrame: frameOffset,
                                         frameCount: AVAudioFrameCount(bufferFrames - frameOffset)) {
             // Play the in-phase remainder of the current loop, then loop normally.
-            player.scheduleBuffer(slice, at: startTime, completionHandler: nil)
+            player.scheduleBuffer(slice, at: start.time, completionHandler: nil)
             player.scheduleBuffer(buffer, at: nil, options: [.loops], completionHandler: nil)
         } else {
             // Either at a loop boundary, or buffer-slice fell through — start clean.
-            player.scheduleBuffer(buffer, at: startTime, options: [.loops], completionHandler: nil)
+            player.scheduleBuffer(buffer, at: start.time, options: [.loops], completionHandler: nil)
         }
         player.play()
     }
@@ -237,15 +272,15 @@ final class AudioManager {
         return slice
     }
 
-    func setMasterVolume(_ volume: Float) {
-        engine.mainMixerNode.outputVolume = volume
-    }
-
     func setVolume(for sample: Sample, volume: Float) {
+        volumes[sample.id] = volume
         playing[sample.id]?.mixer.outputVolume = volume
     }
 
     func removeSampleFromPlay(_ sample: Sample) {
+        activeSamples.removeAll { $0.id == sample.id }
+        volumes.removeValue(forKey: sample.id)
+
         guard let entry = playing.removeValue(forKey: sample.id) else { return }
 
         entry.player.stop()
@@ -280,19 +315,15 @@ final class AudioManager {
     }
 
     private func startAllPlayersInSync() {
-        guard let renderTime = engine.outputNode.lastRenderTime,
-              renderTime.isSampleTimeValid else { return }
-
-        let startSample = renderTime.sampleTime + scheduleLeadFrames
-        masterStartSample = startSample
-        let startTime = AVAudioTime(sampleTime: startSample, atRate: sampleRate)
+        guard let start = futureStart() else { return }
+        masterStartSample = start.sample
 
         for entry in playing.values {
             entry.player.stop()
             entry.player.reset()
         }
         for entry in playing.values {
-            entry.player.scheduleBuffer(entry.buffer, at: startTime, options: [.loops], completionHandler: nil)
+            entry.player.scheduleBuffer(entry.buffer, at: start.time, options: [.loops], completionHandler: nil)
         }
         for entry in playing.values {
             entry.player.play()

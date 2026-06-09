@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct MainVolumeControl: View {
-    @Binding var mainVolume: Float
-    let audioManager: AudioManager
+    @Bindable var audioManager: AudioManager
 
     var body: some View {
         HStack(spacing: 4) {
@@ -40,12 +39,9 @@ struct MainVolumeControl: View {
                 .accessibilityIdentifier("Main Volume")
             Spacer()
 
-            Slider(value: $mainVolume, in: 0...1)
+            Slider(value: $audioManager.masterVolume, in: 0...1)
                 .accentColor(.accentColor)
                 .frame(width: 150)
-                .onChange(of: mainVolume) { _, newValue in
-                    audioManager.setMasterVolume(newValue)
-                }
                 .padding(8)
                 .accessibilityIdentifier("Main Volume Slider")
         }
