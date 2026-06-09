@@ -15,10 +15,11 @@ struct LooperApp: App {
                         .transition(.opacity)
                         .zIndex(1)
                         .task {
-                            // Splash plays its entrance animation underneath
-                            // the audio engine warming up; then dissolves.
-                            try? await Task.sleep(for: .milliseconds(1400))
-                            withAnimation(.easeInOut(duration: 0.45)) {
+                            // Hold long enough for the staged splash sequence
+                            // (anticipation → strike → bloom → one breath of
+                            // hover) to complete before dissolving.
+                            try? await Task.sleep(for: .milliseconds(2200))
+                            withAnimation(.easeInOut(duration: 0.55)) {
                                 splashVisible = false
                             }
                         }
