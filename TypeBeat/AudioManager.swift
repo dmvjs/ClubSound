@@ -7,44 +7,34 @@ import Observation
 final class AudioManager {
     static let shared = AudioManager()
 
-    private let samples: [Sample] = TypeBeat.samples
-
-    var activeSamples: Set<Int> = []
     var bpm: Double = 84.0 {
         didSet {
             adjustAllPlaybackRates()
             if isPlaying { startAllPlayersInSync() }
         }
     }
-
     var pitchLock: Bool = false {
         didSet { adjustAllPlaybackRates() }
     }
-
     var isPlaying: Bool = false
 
     private let beatsPerBar = 4.0
     private let totalBars = 16.0
     private var masterLoopDuration: TimeInterval {
-        let totalBeats = beatsPerBar * totalBars  // 64 beats
-        let secondsPerBeat = 60.0 / bpm
-        return totalBeats * secondsPerBeat
-    }
-    private var sampleRate: Double {
-        engine.outputNode.outputFormat(forBus: 0).sampleRate
+        beatsPerBar * totalBars * 60.0 / bpm  // 64 beats
     }
 
     private let engine = AVAudioEngine()
-    private var players: [Int: AVAudioPlayerNode] = [:]
-    private var mixers: [Int: AVAudioMixerNode] = [:]
-    private var varispeedNodes: [Int: AVAudioUnitVarispeed] = [:]
-    private var timePitchNodes: [Int: AVAudioUnitTimePitch] = [:]
-    private var buffers: [Int: AVAudioPCMBuffer] = [:]
-
+    private var playing: [Int: PlayingSample] = [:]
     private var masterStartTime: AVAudioTime?
 
-    private var masterLoopLength: AVAudioFramePosition {
-        AVAudioFramePosition(masterLoopDuration * sampleRate)
+    private struct PlayingSample {
+        let sample: Sample
+        let player: AVAudioPlayerNode
+        let mixer: AVAudioMixerNode
+        let varispeed: AVAudioUnitVarispeed
+        let timePitch: AVAudioUnitTimePitch
+        let buffer: AVAudioPCMBuffer
     }
 
     private init() {
@@ -59,18 +49,22 @@ final class AudioManager {
     /// engine state and the view state stay consistent.
     func reset() {
         stopAllPlayers()
-        for sample in samples where activeSamples.contains(sample.id) {
-            removeSampleFromPlay(sample)
+        for entry in playing.values {
+            engine.detach(entry.mixer)
+            engine.detach(entry.varispeed)
+            engine.detach(entry.timePitch)
+            engine.detach(entry.player)
         }
+        playing.removeAll()
     }
 
     private func setupAudioSession() {
         do {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setPreferredSampleRate(48000)
-            try audioSession.setPreferredIOBufferDuration(0.005)
-            try audioSession.setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
-            try audioSession.setActive(true)
+            let session = AVAudioSession.sharedInstance()
+            try session.setPreferredSampleRate(48000)
+            try session.setPreferredIOBufferDuration(0.005)
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
+            try session.setActive(true)
         } catch {
             print("❌ Failed to set up audio session: \(error.localizedDescription)")
             #if DEBUG
@@ -94,40 +88,37 @@ final class AudioManager {
         // File I/O happens off-main so we don't block the audio/UI thread.
         guard let buffer = await Self.loadBuffer(for: sample) else { return }
 
-        let player = AVAudioPlayerNode()
-        let mixer = AVAudioMixerNode()
-        let varispeed = AVAudioUnitVarispeed()
-        let timePitch = AVAudioUnitTimePitch()
+        let entry = PlayingSample(
+            sample: sample,
+            player: AVAudioPlayerNode(),
+            mixer: AVAudioMixerNode(),
+            varispeed: AVAudioUnitVarispeed(),
+            timePitch: AVAudioUnitTimePitch(),
+            buffer: buffer
+        )
 
-        engine.attach(player)
-        engine.attach(mixer)
-        engine.attach(varispeed)
-        engine.attach(timePitch)
+        engine.attach(entry.player)
+        engine.attach(entry.mixer)
+        engine.attach(entry.varispeed)
+        engine.attach(entry.timePitch)
 
-        engine.connect(player, to: varispeed, format: buffer.format)
-        engine.connect(varispeed, to: timePitch, format: buffer.format)
-        engine.connect(timePitch, to: mixer, format: buffer.format)
-        engine.connect(mixer, to: engine.mainMixerNode, format: buffer.format)
+        engine.connect(entry.player, to: entry.varispeed, format: buffer.format)
+        engine.connect(entry.varispeed, to: entry.timePitch, format: buffer.format)
+        engine.connect(entry.timePitch, to: entry.mixer, format: buffer.format)
+        engine.connect(entry.mixer, to: engine.mainMixerNode, format: buffer.format)
 
         // Silence the mixer AFTER it's wired into the engine — setting
         // outputVolume before attach gets overwritten when the node joins the
         // render graph, which would leak a frame of full-volume audio before
         // the view's setVolume call lands.
-        mixer.outputVolume = 0.0
+        entry.mixer.outputVolume = 0.0
 
-        players[sample.id] = player
-        mixers[sample.id] = mixer
-        varispeedNodes[sample.id] = varispeed
-        timePitchNodes[sample.id] = timePitch
-        buffers[sample.id] = buffer
-
-        adjustPlaybackRates(for: sample)
+        playing[sample.id] = entry
+        applyRate(to: entry)
 
         if isPlaying {
-            schedulePhaseAligned(player: player, buffer: buffer, rate: bpm / sample.bpm)
+            schedulePhaseAligned(entry: entry)
         }
-
-        activeSamples.insert(sample.id)
     }
 
     /// Loads an audio file off the main actor so the I/O doesn't stall UI or
@@ -137,8 +128,7 @@ final class AudioManager {
             var url: URL?
             #if DEBUG
             if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
-                let testBundle = Bundle(for: AudioManager.self)
-                url = testBundle.url(forResource: sample.fileName, withExtension: nil)
+                url = Bundle(for: AudioManager.self).url(forResource: sample.fileName, withExtension: nil)
             }
             #endif
             url = url ?? Bundle.main.url(forResource: sample.fileName, withExtension: "mp3")
@@ -165,41 +155,36 @@ final class AudioManager {
     /// phase, plays the remainder of the current loop as a sliced buffer, then
     /// hands off to a looping scheduleBuffer. Existing players are not touched —
     /// AVAudioEngine maintains their sample-accurate timing on its own.
-    ///
-    /// `rate` is the effective playback rate (master BPM / sample BPM), the
-    /// same value applied to varispeed / timePitch.
-    private func schedulePhaseAligned(player: AVAudioPlayerNode,
-                                      buffer: AVAudioPCMBuffer,
-                                      rate: Double) {
+    private func schedulePhaseAligned(entry: PlayingSample) {
         let leadTime: TimeInterval = 0.02
         let startTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(leadTime))
+        let rate = bpm / entry.sample.bpm
 
+        let buffer = entry.buffer
         let bufferFrames = AVAudioFramePosition(buffer.frameLength)
         var frameOffset: AVAudioFramePosition = 0
 
-        if let masterStartTime = masterStartTime {
+        if let masterStartTime, startTime.timeIntervalSince(masterStartTime) > 0 {
             let elapsed = startTime.timeIntervalSince(masterStartTime)
-            if elapsed > 0 {
-                let bufferSampleRate = buffer.format.sampleRate
-                let effectiveLoopDuration = Double(buffer.frameLength) / (bufferSampleRate * rate)
-                let phaseInLoop = elapsed.truncatingRemainder(dividingBy: effectiveLoopDuration)
-                frameOffset = AVAudioFramePosition(phaseInLoop * rate * bufferSampleRate)
-                if frameOffset < 0 || frameOffset >= bufferFrames {
-                    frameOffset = 0
-                }
+            let bufferSampleRate = buffer.format.sampleRate
+            let effectiveLoopDuration = Double(buffer.frameLength) / (bufferSampleRate * rate)
+            let phaseInLoop = elapsed.truncatingRemainder(dividingBy: effectiveLoopDuration)
+            frameOffset = AVAudioFramePosition(phaseInLoop * rate * bufferSampleRate)
+            if frameOffset < 0 || frameOffset >= bufferFrames {
+                frameOffset = 0
             }
         }
 
-        if frameOffset == 0 {
-            player.scheduleBuffer(buffer, at: startTime, options: [.loops], completionHandler: nil)
-        } else if let slice = Self.bufferSlice(buffer,
-                                               startingFrame: frameOffset,
-                                               frameCount: AVAudioFrameCount(bufferFrames - frameOffset)) {
+        let player = entry.player
+        if frameOffset > 0,
+           let slice = Self.bufferSlice(buffer,
+                                        startingFrame: frameOffset,
+                                        frameCount: AVAudioFrameCount(bufferFrames - frameOffset)) {
             // Play the in-phase remainder of the current loop, then loop normally.
             player.scheduleBuffer(slice, at: startTime, completionHandler: nil)
             player.scheduleBuffer(buffer, at: nil, options: [.loops], completionHandler: nil)
         } else {
-            // Slice failed (unsupported format) — fall back to clean loop start.
+            // Either at a loop boundary, or buffer-slice fell through — start clean.
             player.scheduleBuffer(buffer, at: startTime, options: [.loops], completionHandler: nil)
         }
         player.play()
@@ -212,7 +197,7 @@ final class AudioManager {
                                                 startingFrame: AVAudioFramePosition,
                                                 frameCount: AVAudioFrameCount) -> AVAudioPCMBuffer? {
         guard startingFrame >= 0,
-              AVAudioFramePosition(frameCount) > 0,
+              frameCount > 0,
               startingFrame + AVAudioFramePosition(frameCount) <= AVAudioFramePosition(source.frameLength),
               let src = source.floatChannelData,
               let slice = AVAudioPCMBuffer(pcmFormat: source.format, frameCapacity: frameCount),
@@ -233,86 +218,66 @@ final class AudioManager {
         engine.mainMixerNode.outputVolume = volume
     }
 
-    private func adjustAllPlaybackRates() {
-        for sampleId in players.keys {
-            if let sample = samples.first(where: { $0.id == sampleId }) {
-                adjustPlaybackRates(for: sample)
-            }
-        }
+    func setVolume(for sample: Sample, volume: Float) {
+        playing[sample.id]?.mixer.outputVolume = volume
     }
 
     func removeSampleFromPlay(_ sample: Sample) {
-        guard let player = players[sample.id] else { return }
+        guard let entry = playing.removeValue(forKey: sample.id) else { return }
 
-        activeSamples.remove(sample.id)
-        player.stop()
+        entry.player.stop()
+        engine.detach(entry.mixer)
+        engine.detach(entry.varispeed)
+        engine.detach(entry.timePitch)
+        engine.detach(entry.player)
 
-        if let mixer = mixers.removeValue(forKey: sample.id) {
-            engine.detach(mixer)
-        }
-        if let varispeed = varispeedNodes.removeValue(forKey: sample.id) {
-            engine.detach(varispeed)
-        }
-        if let timePitch = timePitchNodes.removeValue(forKey: sample.id) {
-            engine.detach(timePitch)
-        }
-        engine.detach(player)
-
-        players.removeValue(forKey: sample.id)
-        buffers.removeValue(forKey: sample.id)
-
-        if players.isEmpty {
+        if playing.isEmpty {
             masterStartTime = nil
             isPlaying = false
         }
     }
 
-    func setVolume(for sample: Sample, volume: Float) {
-        mixers[sample.id]?.outputVolume = volume
+    private func adjustAllPlaybackRates() {
+        for entry in playing.values {
+            applyRate(to: entry)
+        }
     }
 
-    private func adjustPlaybackRates(for sample: Sample) {
-        guard let varispeed = varispeedNodes[sample.id],
-              let timePitch = timePitchNodes[sample.id] else { return }
-
-        let rate = bpm / sample.bpm
-
+    private func applyRate(to entry: PlayingSample) {
+        let rate = Float(bpm / entry.sample.bpm)
         if pitchLock {
-            varispeed.rate = 1.0
-            timePitch.rate = Float(rate)
-            timePitch.pitch = 0.0
-            timePitch.overlap = 8.0
+            entry.varispeed.rate = 1.0
+            entry.timePitch.rate = rate
         } else {
-            varispeed.rate = Float(rate)
-            timePitch.rate = 1.0
-            timePitch.pitch = 0.0
-            timePitch.overlap = 3.0
+            entry.varispeed.rate = rate
+            entry.timePitch.rate = 1.0
         }
+        entry.timePitch.pitch = 0.0
+        entry.timePitch.overlap = pitchLock ? 8.0 : 3.0
     }
 
     private func startAllPlayersInSync() {
         let startTime = AVAudioTime(hostTime: mach_absolute_time() + secondsToHostTime(0.1))
         masterStartTime = startTime
 
-        for player in players.values {
-            player.stop()
-            player.reset()
+        for entry in playing.values {
+            entry.player.stop()
+            entry.player.reset()
         }
-        for (sampleId, player) in players {
-            guard let buffer = buffers[sampleId] else { continue }
-            player.scheduleBuffer(buffer, at: startTime, options: [.loops], completionHandler: nil)
+        for entry in playing.values {
+            entry.player.scheduleBuffer(entry.buffer, at: startTime, options: [.loops], completionHandler: nil)
         }
-        for player in players.values {
-            player.play()
+        for entry in playing.values {
+            entry.player.play()
         }
     }
 
     func stopAllPlayers() {
         isPlaying = false
         masterStartTime = nil
-        for player in players.values {
-            player.stop()
-            player.reset()
+        for entry in playing.values {
+            entry.player.stop()
+            entry.player.reset()
         }
     }
 
@@ -331,14 +296,14 @@ final class AudioManager {
 
 // MARK: - Test hooks
 //
-// Test-only accessors. Gated to DEBUG so the production binary doesn't
-// ship them and so internal state stays private to production callers.
-// The test bundle is built in Debug, so these are available to XCTest.
+// Test-only accessors. Gated to DEBUG so the production binary doesn't ship
+// them and so internal state stays private to production callers. The test
+// bundle is built in Debug, so these are available to XCTest.
 
 #if DEBUG
 extension AudioManager {
     func testPlayer(for sampleId: Int) -> AVAudioPlayerNode? {
-        players[sampleId]
+        playing[sampleId]?.player
     }
 
     func getPlaybackRate(for sample: Sample) -> Float {
@@ -346,19 +311,18 @@ extension AudioManager {
     }
 
     func getSamplePhase(for sampleId: Int) -> Double {
-        guard let player = players[sampleId],
-              let playerTime = player.lastRenderTime,
+        guard let entry = playing[sampleId],
+              let playerTime = entry.player.lastRenderTime,
               let startTime = masterStartTime,
               playerTime.isSampleTimeValid else { return 0 }
 
-        let elapsedTime = playerTime.timeIntervalSince(startTime)
+        let elapsed = playerTime.timeIntervalSince(startTime)
         let beatsPerSecond = bpm / 60.0
-        let totalPhase = elapsedTime * beatsPerSecond
-        return totalPhase.truncatingRemainder(dividingBy: 1.0)
+        return (elapsed * beatsPerSecond).truncatingRemainder(dividingBy: 1.0)
     }
 
     func getSampleRate(for sampleId: Int) -> Float {
-        varispeedNodes[sampleId]?.rate ?? 0
+        playing[sampleId]?.varispeed.rate ?? 0
     }
 }
 #endif
@@ -367,27 +331,12 @@ extension AudioManager {
 
 extension AVAudioTime {
     func timeIntervalSince(_ other: AVAudioTime) -> TimeInterval {
-        let currentTime = Int64(bitPattern: hostTime)
-        let otherTime = Int64(bitPattern: other.hostTime)
-        let hostTimeDiff = currentTime - otherTime
+        let diff = Int64(bitPattern: hostTime) - Int64(bitPattern: other.hostTime)
 
         var timebase = mach_timebase_info_data_t()
         mach_timebase_info(&timebase)
         let numer = Double(timebase.numer)
         let denom = Double(timebase.denom)
-        let nsec = Double(NSEC_PER_SEC)
-
-        return Double(hostTimeDiff) * numer / (denom * nsec)
-    }
-
-    func offset(seconds: TimeInterval) -> AVAudioTime {
-        var timebase = mach_timebase_info_data_t()
-        mach_timebase_info(&timebase)
-
-        let nsecs = seconds * Double(NSEC_PER_SEC)
-        let hostTicks = (nsecs * Double(timebase.denom)) / Double(timebase.numer)
-        let offsetTicks = Int64(hostTicks)
-        let newHostTime = Int64(bitPattern: hostTime) + offsetTicks
-        return AVAudioTime(hostTime: UInt64(max(0, newHostTime)))
+        return Double(diff) * numer / (denom * Double(NSEC_PER_SEC))
     }
 }
