@@ -33,9 +33,10 @@ struct ContentView: View {
                             isInPlaylist: isInPlaylist
                         )
                         .softScrollEdges()
-                        // Solid-black-fading-to-clear vignette over the
-                        // status-bar zone so song titles don't bleed
-                        // through next to the clock.
+                        // Solid-black-fading-to-clear vignettes at top
+                        // (status-bar zone) and bottom (just above the
+                        // now-playing strip) so song titles don't bleed
+                        // visibly into either edge.
                         .overlay(alignment: .top) {
                             LinearGradient(
                                 colors: [Color.black, Color.black.opacity(0)],
@@ -46,6 +47,15 @@ struct ContentView: View {
                             .allowsHitTesting(false)
                             .ignoresSafeArea(edges: .top)
                         }
+                        .overlay(alignment: .bottom) {
+                            LinearGradient(
+                                colors: [Color.black.opacity(0), Color.black],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 60)
+                            .allowsHitTesting(false)
+                        }
                         .safeAreaInset(edge: .bottom, spacing: 0) {
                             // Bottom-anchored UI, stacked thumb-first:
                             //   1. Now-playing strip (volume sliders) —
@@ -54,13 +64,21 @@ struct ContentView: View {
                             //   2. Primary controls (play, tempos, etc.) on a
                             //      solid black backdrop so the bottom row
                             //      reads as a dock
-                            VStack(spacing: 8) {
-                                if !audioManager.activeSamples.isEmpty {
-                                    NowPlayingView(audioManager: audioManager)
+                            //
+                            // GlassGroup wraps both so iOS 26's glassEffect
+                            // children initialize their backdrop sampling
+                            // correctly on first composite (without it, the
+                            // tabs flash white until a state change forces a
+                            // re-layout).
+                            GlassGroup {
+                                VStack(spacing: 8) {
+                                    if !audioManager.activeSamples.isEmpty {
+                                        NowPlayingView(audioManager: audioManager)
+                                    }
+                                    TempoButtonRow(audioManager: audioManager)
+                                        .padding(.bottom, 4)
+                                        .background(Color.black)
                                 }
-                                TempoButtonRow(audioManager: audioManager)
-                                    .padding(.bottom, 4)
-                                    .background(Color.black)
                             }
                         }
 

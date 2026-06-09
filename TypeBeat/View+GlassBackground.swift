@@ -44,3 +44,19 @@ extension View {
         }
     }
 }
+
+/// Wraps content in iOS 26's `GlassEffectContainer` so any `.glassEffect`
+/// children render their backdrop sampling correctly on first composite —
+/// without this, glass tabs can flash white until a scroll/state change
+/// forces a re-layout. No-op on older OSes.
+struct GlassGroup<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer { content() }
+        } else {
+            content()
+        }
+    }
+}
