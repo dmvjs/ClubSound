@@ -33,20 +33,9 @@ struct ContentView: View {
                             isInPlaylist: isInPlaylist
                         )
                         .softScrollEdges()
-                        // Solid-black-fading-to-clear vignettes at top
-                        // (status-bar zone) and bottom (just above the
-                        // now-playing strip) so song titles don't bleed
-                        // visibly into either edge.
-                        .overlay(alignment: .top) {
-                            LinearGradient(
-                                colors: [Color.black, Color.black.opacity(0)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .frame(height: 90)
-                            .allowsHitTesting(false)
-                            .ignoresSafeArea(edges: .top)
-                        }
+                        // Bottom vignette only — the top is covered by the
+                        // pinned BPM header's extended black backdrop (see
+                        // SampleScrollView.bpmHeader).
                         .overlay(alignment: .bottom) {
                             LinearGradient(
                                 colors: [Color.black.opacity(0), Color.black],

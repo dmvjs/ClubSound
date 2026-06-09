@@ -45,10 +45,12 @@ struct SampleScrollView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .frame(height: Constants.headerHeight)
             .padding(.leading, 4)
+            // Solid black backdrop that extends UP through the top safe
+            // area, so when the header is pinned at the top of the scroll
+            // view, it covers the whole status-bar zone too. The soft
+            // scroll edge effect then handles the fade below the header.
             .background(
-                Color.black
-                    .opacity(0.95)
-                    .edgesIgnoringSafeArea(.horizontal)
+                Color.black.ignoresSafeArea(edges: [.top, .horizontal])
             )
             .accessibilityIdentifier("bpm-header-\(Int(bpm))")
     }

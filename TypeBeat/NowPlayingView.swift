@@ -6,7 +6,7 @@ struct NowPlayingView: View {
     var body: some View {
         VStack(spacing: 2) {
             MainVolumeControl(audioManager: audioManager)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 6)
                 .padding(.top, 2)
                 .padding(.bottom, 4)
 

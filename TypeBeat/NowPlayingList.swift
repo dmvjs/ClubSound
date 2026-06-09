@@ -15,7 +15,7 @@ struct NowPlayingList: View {
                     remove: { audioManager.removeSampleFromPlay(sample) },
                     audioManager: audioManager
                 )
-                .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                .listRowInsets(EdgeInsets(top: 8, leading: 6, bottom: 8, trailing: 6))
                 .listRowSeparator(.hidden)
                 .accessibilityIdentifier("now-playing-row-\(sample.id)")
             }
