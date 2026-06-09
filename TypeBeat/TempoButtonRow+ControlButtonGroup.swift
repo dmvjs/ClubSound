@@ -39,11 +39,11 @@ struct ControlButtonGroup: View {
         }) {
             ZStack {
                 Circle()
-                    .fill(audioManager.isPlaying ? Color.green : Color.red)
-                
+                    .fill(audioManager.isPlaying ? Color.red : Color.green)
+
                 Image(systemName: audioManager.isPlaying ? "stop.fill" : "play.fill")
                     .font(.system(size: buttonSize * 0.5))
-                    .foregroundColor(audioManager.isPlaying ? .black : .white)
+                    .foregroundColor(.white)
             }
             .frame(width: buttonSize, height: buttonSize)
             .scaleEffect(audioManager.isPlaying ? 1.0 : breatheScale)

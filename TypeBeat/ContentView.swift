@@ -23,7 +23,8 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            GeometryReader { _ in
+            GeometryReader { geometry in
+                let safeTop = geometry.safeAreaInsets.top
                 ScrollViewReader { proxy in
                     ZStack(alignment: .topTrailing) {
                         SampleScrollView(
@@ -33,9 +34,29 @@ struct ContentView: View {
                             isInPlaylist: isInPlaylist
                         )
                         .softScrollEdges()
-                        // Bottom vignette only — the top is covered by the
-                        // pinned BPM header's extended black backdrop (see
-                        // SampleScrollView.bpmHeader).
+                        // Solid black behind the status bar / Dynamic Island
+                        // zone — the BPM header pins right below this.
+                        .overlay(alignment: .top) {
+                            Color.black
+                                .frame(height: safeTop)
+                                .ignoresSafeArea(edges: .top)
+                                .allowsHitTesting(false)
+                        }
+                        // Soft fade right below the pinned BPM header (header
+                        // height = 44pt) so song titles dissolve before they
+                        // collide with the header text above.
+                        .overlay(alignment: .top) {
+                            LinearGradient(
+                                colors: [Color.black, Color.black.opacity(0)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 40)
+                            .padding(.top, 44)
+                            .allowsHitTesting(false)
+                        }
+                        // Symmetric fade at the bottom of the scroll area,
+                        // above the now-playing strip.
                         .overlay(alignment: .bottom) {
                             LinearGradient(
                                 colors: [Color.black.opacity(0), Color.black],
