@@ -10,7 +10,7 @@ import SwiftUI
 
 struct MainVolumeControl: View {
     @Binding var mainVolume: Float
-    @ObservedObject var audioManager: AudioManager
+    let audioManager: AudioManager
     @State private var progress: Double = 0
     
     var body: some View {
@@ -41,8 +41,8 @@ struct MainVolumeControl: View {
                     )
             }
             .padding(5)
-            .onAppear {
-                startProgressUpdates()
+            .onReceive(Timer.publish(every: 1/30, on: .main, in: .common).autoconnect()) { _ in
+                progress = audioManager.isPlaying ? audioManager.loopProgress() : 0
             }
 
             Text("main.volume".localized)
@@ -66,15 +66,5 @@ struct MainVolumeControl: View {
                 .fill(Color(.systemGray6).opacity(0.4))
         )
         .padding(.vertical, -2)
-    }
-    
-    private func startProgressUpdates() {
-        Timer.scheduledTimer(withTimeInterval: 1/30, repeats: true) { _ in
-            if audioManager.isPlaying {
-                progress = audioManager.loopProgress()
-            } else {
-                progress = 0
-            }
-        }
     }
 }

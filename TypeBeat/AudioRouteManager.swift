@@ -1,34 +1,24 @@
-//
-//  AudioRouteManager.swift
-//  TypeBeat
-//
-//  Created by Kirk Elliott on 12/13/24.
-//
-
-
 import AVFoundation
+import Observation
 
-class AudioRouteManager: ObservableObject {
-    @Published var currentOutput: String = "Speaker"
-
-    private var audioSession = AVAudioSession.sharedInstance()
+@MainActor
+@Observable
+final class AudioRouteManager {
+    var currentOutput: String = "Speaker"
 
     init() {
         NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(routeChanged),
-            name: AVAudioSession.routeChangeNotification,
-            object: nil
-        )
-        updateCurrentOutput()
-    }
-
-    @objc private func routeChanged(notification: Notification) {
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.updateCurrentOutput() }
+        }
         updateCurrentOutput()
     }
 
     func updateCurrentOutput() {
-        guard let currentRoute = audioSession.currentRoute.outputs.first else {
+        guard let currentRoute = AVAudioSession.sharedInstance().currentRoute.outputs.first else {
             currentOutput = "Unknown"
             return
         }

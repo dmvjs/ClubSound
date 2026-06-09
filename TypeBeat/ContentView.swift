@@ -2,12 +2,11 @@ import SwiftUI
 import AVFoundation
 
 struct ContentView: View {
-    @ObservedObject var audioManager: AudioManager
+    let audioManager: AudioManager
     @State private var sampleVolumes: [Int: Float] = [:]
     @State private var nowPlaying: [Sample] = []
     @State private var activeBPM: Double? = 84  // Set initial BPM
     @State private var activeKey: MusicKey? = .C  // Set initial key
-    @StateObject private var wakeLockManager = WakeLockManager()
     @State private var mainVolume: Float = 0.69
 
     // Group samples by BPM and Key, sorted by tempo and key
@@ -136,50 +135,23 @@ struct ContentView: View {
     }
 
     private func addToNowPlaying(sample: Sample) {
-        if nowPlaying.count < 4 && !nowPlaying.contains(where: { $0.id == sample.id }) {
-            // Set initial volume to zero
-            sampleVolumes[sample.id] = 0.0
-            
-            // Add to UI first
-            DispatchQueue.main.async {
-                self.nowPlaying.append(sample)
-            }
-            
-            // Handle audio setup on background thread
-            Task.detached(priority: .userInitiated) {
-                // Add the new sample without affecting playback
-                await self.audioManager.addSampleToPlay(sample)
-                
-                // Set volume on main thread
-                await MainActor.run {
-                    self.audioManager.setVolume(for: sample, volume: 0.0)
-                    self.audioManager.objectWillChange.send()
-                }
-            }
+        guard nowPlaying.count < 4,
+              !nowPlaying.contains(where: { $0.id == sample.id }) else { return }
+
+        sampleVolumes[sample.id] = 0.0
+        nowPlaying.append(sample)
+
+        Task {
+            await audioManager.addSampleToPlay(sample)
+            audioManager.setVolume(for: sample, volume: 0.0)
         }
     }
 
     private func removeFromNowPlaying(sample: Sample) {
-        if let index = nowPlaying.firstIndex(where: { $0.id == sample.id }) {
-            // UI updates on main thread
-            DispatchQueue.main.async {
-                withAnimation {
-                    // Use Array's remove method explicitly
-                    var updatedArray = self.nowPlaying
-                    updatedArray.remove(at: index)
-                    self.nowPlaying = updatedArray
-                }
-            }
-            
-            // Audio cleanup on background thread
-            DispatchQueue.global(qos: .userInitiated).async {
-                self.audioManager.removeSampleFromPlay(sample)
-                // Force UI update on main thread after cleanup
-                DispatchQueue.main.async {
-                    self.audioManager.objectWillChange.send()
-                }
-            }
+        withAnimation {
+            nowPlaying.removeAll { $0.id == sample.id }
         }
+        audioManager.removeSampleFromPlay(sample)
     }
 
     private func isInPlaylist(_ sample: Sample) -> Bool {

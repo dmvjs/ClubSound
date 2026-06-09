@@ -11,9 +11,9 @@ import SwiftUI
 struct NowPlayingList: View {
     @Binding var nowPlaying: [Sample]
     @Binding var sampleVolumes: [Int: Float]
-    @ObservedObject var audioManager: AudioManager
+    let audioManager: AudioManager
     let removeFromNowPlaying: (Sample) -> Void
-    
+
     var body: some View {
         List {
             ForEach(nowPlaying, id: \.id) { sample in
@@ -22,17 +22,11 @@ struct NowPlayingList: View {
                     volume: Binding(
                         get: { sampleVolumes[sample.id] ?? 0.5 },
                         set: { newValue in
-                            DispatchQueue.main.async {
-                                sampleVolumes[sample.id] = newValue
-                                audioManager.setVolume(for: sample, volume: newValue)
-                            }
+                            sampleVolumes[sample.id] = newValue
+                            audioManager.setVolume(for: sample, volume: newValue)
                         }
                     ),
-                    remove: {
-                        DispatchQueue.main.async {
-                            removeFromNowPlaying(sample)
-                        }
-                    },
+                    remove: { removeFromNowPlaying(sample) },
                     audioManager: audioManager
                 )
                 .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))

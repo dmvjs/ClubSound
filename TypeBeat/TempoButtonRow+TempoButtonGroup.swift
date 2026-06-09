@@ -1,21 +1,14 @@
 import SwiftUI
 
 struct TempoButtonGroup: View {
-    @ObservedObject var audioManager: AudioManager
+    let audioManager: AudioManager
     let buttonSize: CGFloat
     
     var body: some View {
         ForEach([69, 84, 94, 102], id: \.self) { bpm in
             Button(action: {
-                // Ensure BPM updates happen on main thread
-                DispatchQueue.main.async {
-                    // Update BPM without stopping playback
-                    audioManager.updateBPM(to: Double(bpm))
-                    
-                    // Provide haptic feedback
-                    let generator = UIImpactFeedbackGenerator(style: .medium)
-                    generator.impactOccurred()
-                }
+                audioManager.updateBPM(to: Double(bpm))
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             }) {
                 bpmButtonLabel(for: bpm)
             }

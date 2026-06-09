@@ -6,7 +6,7 @@ struct NowPlayingRow: View {
     let sample: Sample
     @Binding var volume: Float
     let remove: () -> Void
-    @ObservedObject var audioManager: AudioManager
+    let audioManager: AudioManager
     
     @State private var progress: Double = 0
     

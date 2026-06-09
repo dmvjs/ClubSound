@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct ControlButtonGroup: View {
-    @ObservedObject var audioManager: AudioManager
-    @ObservedObject var wakeLockManager: WakeLockManager
+    let audioManager: AudioManager
+    @Bindable var wakeLockManager: WakeLockManager
     @Binding var showingLanguageSelection: Bool
     @Binding var breatheScale: CGFloat
     let buttonSize: CGFloat

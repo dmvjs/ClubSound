@@ -4,7 +4,7 @@ struct NowPlayingView: View {
     @Binding var nowPlaying: [Sample]
     @Binding var sampleVolumes: [Int: Float]
     @Binding var mainVolume: Float
-    @ObservedObject var audioManager: AudioManager
+    let audioManager: AudioManager
     let removeFromNowPlaying: (Sample) -> Void
 
     var body: some View {
