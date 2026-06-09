@@ -13,7 +13,5 @@ struct NowPlayingView: View {
             NowPlayingList(audioManager: audioManager)
         }
         .frame(maxWidth: .greatestFiniteMagnitude, alignment: .bottom)
-        .background(Color.black.opacity(0.9))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }

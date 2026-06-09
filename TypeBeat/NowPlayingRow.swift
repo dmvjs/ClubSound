@@ -56,10 +56,7 @@ struct NowPlayingRow: View {
                 .accessibilityIdentifier("Volume Slider")
         }
         .listRowSeparator(.hidden)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.gray.opacity(0.3))
-        )
+        .glassBackground(cornerRadius: 16)
         .padding(.vertical, -4)
         .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {

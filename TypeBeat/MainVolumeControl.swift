@@ -45,10 +45,7 @@ struct MainVolumeControl: View {
                 .padding(8)
                 .accessibilityIdentifier("Main Volume Slider")
         }
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.gray.opacity(0.3))
-        )
+        .glassBackground(cornerRadius: 16)
         .padding(.vertical, -2)
     }
 }
