@@ -343,6 +343,55 @@ final class AudioManager {
         isPlaying = true
         startAllPlayersInSync()
     }
+
+    /// Play-button entry point with sensible fills:
+    ///
+    /// 1. If no samples are loaded, picks two harmonically-related samples
+    ///    (same key) at the active tempo and queues them. Tempo 69 has no
+    ///    catalog samples, so falls through to 84.
+    /// 2. If samples are loaded but every volume is silent, lifts them all
+    ///    to just-above-half so the user actually hears something on the
+    ///    first tap. Volumes the user has already moved are left alone.
+    /// 3. Starts playback.
+    func playWithDefaults() async {
+        if activeSamples.isEmpty {
+            await loadDefaultPair()
+        }
+
+        let silenceThreshold: Float = 0.05
+        let defaultVolume: Float = 0.6
+        if !activeSamples.isEmpty,
+           activeSamples.allSatisfy({ (volumes[$0.id] ?? 0) < silenceThreshold }) {
+            for sample in activeSamples {
+                setVolume(for: sample, volume: defaultVolume)
+            }
+        }
+
+        play()
+    }
+
+    /// Picks two samples in the same key at the active tempo and queues them.
+    /// Falls back to two random samples in the tempo bucket if no key has
+    /// two available at once.
+    private func loadDefaultPair() async {
+        let targetBPM: Double = (bpm == 69) ? 84 : bpm
+        let pool = TypeBeat.samples.filter { $0.bpm == targetBPM }
+        guard !pool.isEmpty else { return }
+
+        let byKey = Dictionary(grouping: pool, by: \.key)
+        let pair: [Sample]
+        if let twoInOneKey = byKey.values.filter({ $0.count >= 2 }).randomElement() {
+            pair = Array(twoInOneKey.shuffled().prefix(2))
+        } else {
+            // Edge case: every key has only one sample at this tempo.
+            // Fall back to any two at the same tempo.
+            pair = Array(pool.shuffled().prefix(2))
+        }
+
+        for sample in pair {
+            await addSampleToPlay(sample)
+        }
+    }
 }
 
 // MARK: - Test hooks

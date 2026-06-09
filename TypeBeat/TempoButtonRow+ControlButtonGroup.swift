@@ -34,7 +34,7 @@ struct ControlButtonGroup: View {
             if audioManager.isPlaying {
                 audioManager.stopAllPlayers()
             } else {
-                audioManager.play()
+                Task { await audioManager.playWithDefaults() }
             }
         }) {
             ZStack {
