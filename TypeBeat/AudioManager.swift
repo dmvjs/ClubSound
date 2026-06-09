@@ -76,6 +76,7 @@ final class AudioManager {
         let mixer: AVAudioMixerNode
         let varispeed: AVAudioUnitVarispeed
         let timePitch: AVAudioUnitTimePitch
+        let delay: AVAudioUnitDelay
         let buffer: AVAudioPCMBuffer
     }
 
@@ -93,6 +94,7 @@ final class AudioManager {
             engine.detach(entry.mixer)
             engine.detach(entry.varispeed)
             engine.detach(entry.timePitch)
+            engine.detach(entry.delay)
             engine.detach(entry.player)
         }
         playing.removeAll()
@@ -147,12 +149,18 @@ final class AudioManager {
             return
         }
 
+        let delay = AVAudioUnitDelay()
+        delay.wetDryMix = 0      // bypassed during normal playback
+        delay.feedback = 0
+        delay.delayTime = 0
+
         let entry = PlayingSample(
             sample: sample,
             player: AVAudioPlayerNode(),
             mixer: AVAudioMixerNode(),
             varispeed: AVAudioUnitVarispeed(),
             timePitch: AVAudioUnitTimePitch(),
+            delay: delay,
             buffer: buffer
         )
 
@@ -160,10 +168,12 @@ final class AudioManager {
         engine.attach(entry.mixer)
         engine.attach(entry.varispeed)
         engine.attach(entry.timePitch)
+        engine.attach(entry.delay)
 
         engine.connect(entry.player, to: entry.varispeed, format: buffer.format)
         engine.connect(entry.varispeed, to: entry.timePitch, format: buffer.format)
-        engine.connect(entry.timePitch, to: entry.mixer, format: buffer.format)
+        engine.connect(entry.timePitch, to: entry.delay, format: buffer.format)
+        engine.connect(entry.delay, to: entry.mixer, format: buffer.format)
         engine.connect(entry.mixer, to: engine.mainMixerNode, format: buffer.format)
 
         // Silence the mixer AFTER it's wired into the engine — setting
@@ -278,20 +288,67 @@ final class AudioManager {
     }
 
     func removeSampleFromPlay(_ sample: Sample) {
+        // Remove from the now-playing UI immediately. The audio entry stays
+        // in `playing` until its echo tail finishes so the engine graph
+        // keeps rendering through the fade-out.
         activeSamples.removeAll { $0.id == sample.id }
         volumes.removeValue(forKey: sample.id)
 
-        guard let entry = playing.removeValue(forKey: sample.id) else { return }
+        guard let entry = playing[sample.id] else { return }
+
+        // Trigger the delay (DJ-style echo trail) on what's currently in
+        // the chain, then ramp the mixer to silence over the tail. The
+        // player stops feeding the delay, so what echoes is the buffered
+        // tail of the last fragment, decaying through feedback.
+        let beat = 60.0 / bpm
+        let delayTime = beat / 2          // half-beat echo (sync to grid)
+        let feedback: Float = 55          // each repeat ≈ 55% of the previous
+        let tailSeconds = delayTime * 5   // ~5 echoes before silence
+
+        entry.delay.delayTime = delayTime
+        entry.delay.feedback = feedback
+        entry.delay.lowPassCutoff = 5000  // warm/vintage tape feel
+        entry.delay.wetDryMix = 100       // wet only — dry sample has stopped
 
         entry.player.stop()
-        engine.detach(entry.mixer)
-        engine.detach(entry.varispeed)
-        engine.detach(entry.timePitch)
-        engine.detach(entry.player)
 
-        if playing.isEmpty {
-            masterStartSample = nil
-            isPlaying = false
+        // Smooth mixer fade so the echo tail rides out gracefully instead
+        // of getting hard-cut at the end of the tail window.
+        rampMixer(entry.mixer, to: 0, over: tailSeconds)
+
+        // Final cleanup after the tail completes.
+        let id = sample.id
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(tailSeconds + 0.1))
+            guard let pending = playing.removeValue(forKey: id) else { return }
+            pending.player.stop()
+            engine.detach(pending.mixer)
+            engine.detach(pending.varispeed)
+            engine.detach(pending.timePitch)
+            engine.detach(pending.delay)
+            engine.detach(pending.player)
+
+            if playing.isEmpty {
+                masterStartSample = nil
+                isPlaying = false
+            }
+        }
+    }
+
+    /// Smoothly ramps `mixer.outputVolume` from its current value to
+    /// `target` over `duration` seconds via short timed steps. Used to feather
+    /// in delay-echo tails on delete instead of cutting the audio.
+    private func rampMixer(_ mixer: AVAudioMixerNode, to target: Float, over duration: TimeInterval) {
+        let steps = max(8, Int(duration * 30))           // ~30 Hz update
+        let stepDuration = duration / Double(steps)
+        let startVolume = mixer.outputVolume
+        Task { @MainActor in
+            for i in 1...steps {
+                let t = Float(i) / Float(steps)
+                mixer.outputVolume = startVolume + (target - startVolume) * t
+                try? await Task.sleep(for: .seconds(stepDuration))
+            }
+            mixer.outputVolume = target
         }
     }
 
