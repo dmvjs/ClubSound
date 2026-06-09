@@ -21,6 +21,7 @@ struct NowPlayingList: View {
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .frame(height: CGFloat(audioManager.activeSamples.count) * 60 + 10)
         .frame(maxWidth: .infinity)
         .animation(.easeInOut, value: audioManager.activeSamples.count)

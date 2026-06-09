@@ -30,4 +30,17 @@ extension View {
             self.background(Circle().fill(Color.gray.opacity(0.3)))
         }
     }
+
+    /// Soft Liquid Glass fade at the top and bottom of a scroll view, so
+    /// content visually dissolves before colliding with adjacent UI (pinned
+    /// section headers, bottom now-playing strip). iOS 26+ only; older OSes
+    /// render the view unchanged.
+    @ViewBuilder
+    func softScrollEdges() -> some View {
+        if #available(iOS 26.0, *) {
+            self.scrollEdgeEffectStyle(.soft, for: [.top, .bottom])
+        } else {
+            self
+        }
+    }
 }

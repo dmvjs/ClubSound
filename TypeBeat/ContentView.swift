@@ -32,6 +32,7 @@ struct ContentView: View {
                             removeFromNowPlaying: removeFromNowPlaying,
                             isInPlaylist: isInPlaylist
                         )
+                        .softScrollEdges()
                         .safeAreaInset(edge: .bottom, spacing: 0) {
                             // Bottom-anchored UI, stacked thumb-first:
                             //   1. Now-playing strip (volume sliders)
@@ -43,6 +44,11 @@ struct ContentView: View {
                                 TempoButtonRow(audioManager: audioManager)
                             }
                             .padding(.bottom, 4)
+                            // Guarantee a dark backdrop behind the glass tabs
+                            // so .glassEffect samples a known color on first
+                            // render, rather than showing white until the
+                            // scroll view repaints.
+                            .background(Color.black)
                         }
 
                         VStack(alignment: .trailing, spacing: 8) {
