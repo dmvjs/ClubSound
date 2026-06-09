@@ -9,9 +9,9 @@
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
-		<string>#000000</string>
+		<string>SplashBackground</string>
 		<key>UIImageName</key>
-		<string>splash@1x</string>
+		<string>splash</string>
 	</dict>
 	<key>CFBundleLocalizations</key>
 	<array>
