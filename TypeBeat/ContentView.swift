@@ -26,21 +26,23 @@ struct ContentView: View {
             GeometryReader { _ in
                 ScrollViewReader { proxy in
                     ZStack(alignment: .topTrailing) {
-                        VStack(spacing: 0) {
-                            Color.clear
-                                .frame(height: Self.maxButtonSize)
-
-                            SampleScrollView(
-                                groupedSamples: groupedSamples,
-                                addToNowPlaying: addToNowPlaying,
-                                removeFromNowPlaying: removeFromNowPlaying,
-                                isInPlaylist: isInPlaylist
-                            )
-                            .padding(.top, 8)
-
-                            if !audioManager.activeSamples.isEmpty {
-                                NowPlayingView(audioManager: audioManager)
+                        SampleScrollView(
+                            groupedSamples: groupedSamples,
+                            addToNowPlaying: addToNowPlaying,
+                            removeFromNowPlaying: removeFromNowPlaying,
+                            isInPlaylist: isInPlaylist
+                        )
+                        .safeAreaInset(edge: .bottom, spacing: 0) {
+                            // Bottom-anchored UI, stacked thumb-first:
+                            //   1. Now-playing strip (volume sliders)
+                            //   2. Primary controls (play, tempos, etc.)
+                            VStack(spacing: 8) {
+                                if !audioManager.activeSamples.isEmpty {
+                                    NowPlayingView(audioManager: audioManager)
+                                }
+                                TempoButtonRow(audioManager: audioManager)
                             }
+                            .padding(.bottom, 4)
                         }
 
                         VStack(alignment: .trailing, spacing: 8) {
@@ -60,13 +62,7 @@ struct ContentView: View {
                             .zIndex(2)
                         }
                         .padding(.trailing, 6)
-                        .padding(.top, Self.maxButtonSize + 24)
-
-                        HStack {
-                            TempoButtonRow(audioManager: audioManager)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .zIndex(2)
+                        .padding(.top, 12)
                     }
                     .background(Color.black)
                 }

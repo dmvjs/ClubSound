@@ -44,7 +44,7 @@ struct NowPlayingRow: View {
             .padding(5)
 
             Text(sample.title)
-                .font(.subheadline)
+                .font(.subheadline.weight(.medium))
                 .foregroundColor(.white)
                 .lineLimit(2)
             Spacer()
@@ -57,11 +57,11 @@ struct NowPlayingRow: View {
         }
         .listRowSeparator(.hidden)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(.systemGray6).opacity(0.4))
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.gray.opacity(0.3))
         )
         .padding(.vertical, -4)
-        .listRowBackground(Color.black.opacity(0.9))
+        .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive, action: remove) {
                 Label("action.remove".localized, systemImage: "trash")

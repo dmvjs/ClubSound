@@ -33,7 +33,7 @@ struct MainVolumeControl: View {
             .padding(5)
 
             Text("main.volume".localized)
-                .font(.subheadline)
+                .font(.subheadline.weight(.medium))
                 .foregroundColor(.white)
                 .lineLimit(2)
                 .accessibilityIdentifier("Main Volume")
@@ -46,8 +46,8 @@ struct MainVolumeControl: View {
                 .accessibilityIdentifier("Main Volume Slider")
         }
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(.systemGray6).opacity(0.4))
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.gray.opacity(0.3))
         )
         .padding(.vertical, -2)
     }
