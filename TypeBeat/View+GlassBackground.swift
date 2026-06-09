@@ -16,4 +16,18 @@ extension View {
             )
         }
     }
+
+    /// Background for a circular toggle/control button. When `isActive`, fills
+    /// with `activeColor`; otherwise renders Liquid Glass (iOS 26+) or the
+    /// inactive-gray fallback.
+    @ViewBuilder
+    func circleControlBackground(isActive: Bool, activeColor: Color = .green) -> some View {
+        if isActive {
+            self.background(Circle().fill(activeColor))
+        } else if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: .circle)
+        } else {
+            self.background(Circle().fill(Color.gray.opacity(0.3)))
+        }
+    }
 }

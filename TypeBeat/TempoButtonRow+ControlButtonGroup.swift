@@ -55,52 +55,47 @@ struct ControlButtonGroup: View {
     }
     
     private var pitchLockButton: some View {
-        Button(action: {
+        Button {
             audioManager.pitchLock.toggle()
-        }) {
+        } label: {
             Image(systemName: audioManager.pitchLock ? "lock.fill" : "lock.open")
                 .font(.system(size: buttonSize * 0.5))
                 .foregroundColor(audioManager.pitchLock ? .black : .white)
                 .frame(width: buttonSize, height: buttonSize)
-                .background(
-                    Circle()
-                        .fill(audioManager.pitchLock ? Color.green : Color.gray.opacity(0.3))
-                )
+                .circleControlBackground(isActive: audioManager.pitchLock)
                 .shadow(color: audioManager.pitchLock ? Color.green.opacity(0.4) : .clear, radius: 7, x: 0, y: 4)
         }
         .accessibilityLabel("lock_pitch".localized)
     }
-    
+
     private var wakeLockButton: some View {
-        Button(action: {
+        Button {
             if wakeLockManager.isWakeLockEnabled {
                 wakeLockManager.disableWakeLock()
             } else {
                 wakeLockManager.enableWakeLock()
             }
-        }) {
+        } label: {
             Image(systemName: wakeLockManager.isWakeLockEnabled ? "bolt.fill" : "bolt.slash")
                 .font(.system(size: buttonSize * 0.5))
                 .foregroundColor(wakeLockManager.isWakeLockEnabled ? .black : .white)
                 .frame(width: buttonSize, height: buttonSize)
-                .background(
-                    Circle()
-                        .fill(wakeLockManager.isWakeLockEnabled ? Color.green : Color.gray.opacity(0.3))
-                )
+                .circleControlBackground(isActive: wakeLockManager.isWakeLockEnabled)
                 .shadow(color: wakeLockManager.isWakeLockEnabled ? Color.green.opacity(0.4) : .clear, radius: 7, x: 0, y: 4)
         }
         .accessibilityLabel("wake_lock".localized)
     }
-    
+
     private var languageButton: some View {
-        Button(action: {
+        Button {
             showingLanguageSelection = true
-        }) {
+        } label: {
             Image(systemName: "globe")
                 .font(.system(size: buttonSize * 0.5))
                 .foregroundColor(.white)
                 .frame(width: buttonSize, height: buttonSize)
-                .background(Circle().fill(Color.gray.opacity(0.3)))
+                .circleControlBackground(isActive: false)
         }
     }
-} 
+}
+
