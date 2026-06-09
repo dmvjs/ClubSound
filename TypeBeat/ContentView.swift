@@ -33,22 +33,35 @@ struct ContentView: View {
                             isInPlaylist: isInPlaylist
                         )
                         .softScrollEdges()
+                        // Solid-black-fading-to-clear vignette over the
+                        // status-bar zone so song titles don't bleed
+                        // through next to the clock.
+                        .overlay(alignment: .top) {
+                            LinearGradient(
+                                colors: [Color.black, Color.black.opacity(0)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 90)
+                            .allowsHitTesting(false)
+                            .ignoresSafeArea(edges: .top)
+                        }
                         .safeAreaInset(edge: .bottom, spacing: 0) {
                             // Bottom-anchored UI, stacked thumb-first:
-                            //   1. Now-playing strip (volume sliders)
-                            //   2. Primary controls (play, tempos, etc.)
+                            //   1. Now-playing strip (volume sliders) —
+                            //      transparent so the glass tabs can sample
+                            //      the scroll-list content above them
+                            //   2. Primary controls (play, tempos, etc.) on a
+                            //      solid black backdrop so the bottom row
+                            //      reads as a dock
                             VStack(spacing: 8) {
                                 if !audioManager.activeSamples.isEmpty {
                                     NowPlayingView(audioManager: audioManager)
                                 }
                                 TempoButtonRow(audioManager: audioManager)
+                                    .padding(.bottom, 4)
+                                    .background(Color.black)
                             }
-                            .padding(.bottom, 4)
-                            // Guarantee a dark backdrop behind the glass tabs
-                            // so .glassEffect samples a known color on first
-                            // render, rather than showing white until the
-                            // scroll view repaints.
-                            .background(Color.black)
                         }
 
                         VStack(alignment: .trailing, spacing: 8) {
