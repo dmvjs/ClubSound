@@ -43,7 +43,7 @@ struct ControlButtonGroup: View {
 
                 Image(systemName: audioManager.isPlaying ? "stop.fill" : "play.fill")
                     .font(.system(size: buttonSize * 0.5))
-                    .foregroundColor(.white)
+                    .foregroundColor(.black)
             }
             .frame(width: buttonSize, height: buttonSize)
             .scaleEffect(audioManager.isPlaying ? 1.0 : breatheScale)
