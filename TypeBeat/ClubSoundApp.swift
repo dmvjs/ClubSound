@@ -3,31 +3,13 @@ import SwiftUI
 @main
 struct LooperApp: App {
     @AppStorage("AppLanguage") private var language: String = Self.defaultLanguage()
-    @State private var splashVisible = true
 
     var body: some Scene {
         WindowGroup {
-            ZStack {
-                ContentView(audioManager: .shared)
-
-                if splashVisible {
-                    SplashScreenView()
-                        .transition(.opacity)
-                        .zIndex(1)
-                        .task {
-                            // Hold long enough for the staged splash sequence
-                            // (anticipation → strike → bloom → one breath of
-                            // hover) to complete before dissolving.
-                            try? await Task.sleep(for: .milliseconds(2200))
-                            withAnimation(.easeInOut(duration: 0.55)) {
-                                splashVisible = false
-                            }
-                        }
-                }
-            }
-            .id(language)
-            .environment(\.locale, Locale(identifier: language))
-            .onAppear(perform: setFallbackBackgroundColor)
+            ContentView(audioManager: .shared)
+                .id(language)
+                .environment(\.locale, Locale(identifier: language))
+                .onAppear(perform: setFallbackBackgroundColor)
         }
     }
 

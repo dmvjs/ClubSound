@@ -10,8 +10,6 @@
 	<dict>
 		<key>UIColorName</key>
 		<string>SplashBackground</string>
-		<key>UIImageName</key>
-		<string>splash</string>
 	</dict>
 	<key>CFBundleLocalizations</key>
 	<array>
