@@ -71,14 +71,14 @@ struct ContentView: View {
                             // tabs flash white until a state change forces a
                             // re-layout).
                             GlassGroup {
-                                VStack(spacing: 8) {
+                                VStack(spacing: 0) {
                                     if !audioManager.activeSamples.isEmpty {
                                         NowPlayingView(audioManager: audioManager)
                                     }
                                     TempoButtonRow(audioManager: audioManager)
                                         .padding(.bottom, 4)
-                                        .background(Color.black)
                                 }
+                                .background(Color.black)
                             }
                         }
 
