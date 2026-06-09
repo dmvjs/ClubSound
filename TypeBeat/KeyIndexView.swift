@@ -53,13 +53,13 @@ struct KeyIndexView: View {
                 selectedKey = activeKey
             }
         }
-        .onChange(of: activeKey) { newValue in
+        .onChange(of: activeKey) { _, newValue in
             selectedKey = newValue
         }
-        .onChange(of: selectedBPM) { newValue in
+        .onChange(of: selectedBPM) { _, _ in
             // Force refresh when BPM changes
             forceRefresh = UUID()
-            
+
             // When BPM selection changes, we may need to update the selected key
             // if it's not available in the new BPM
             if let selectedKey = selectedKey, !availableKeysForSelectedBPM.contains(selectedKey) {

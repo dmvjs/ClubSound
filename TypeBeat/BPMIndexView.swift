@@ -46,7 +46,7 @@ struct BPMIndexView: View {
                 selectedBPM = activeBPM
             }
         }
-        .onChange(of: activeBPM) { newValue in
+        .onChange(of: activeBPM) { _, newValue in
             selectedBPM = newValue
         }
     }

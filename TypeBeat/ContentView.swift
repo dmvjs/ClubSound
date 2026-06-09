@@ -44,7 +44,6 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
-                let safeAreaInsets = geometry.safeAreaInsets
                 ScrollViewReader { proxy in
                     ZStack(alignment: .topTrailing) {
                         // Base content

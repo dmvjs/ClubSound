@@ -1,23 +1,13 @@
-//
-//  AudioOutputPicker.swift
-//  TypeBeat
-//
-//  Created by Kirk Elliott on 12/13/24.
-//
-
-
 import SwiftUI
-import MediaPlayer
+import AVKit
 
 struct AudioOutputPicker: UIViewRepresentable {
-    func makeUIView(context: Context) -> MPVolumeView {
-        let volumeView = MPVolumeView()
-        volumeView.showsVolumeSlider = false // Hide the volume slider
-        volumeView.showsRouteButton = true  // Show only the route picker
-        volumeView.setRouteButtonImage(UIImage(systemName: "airplayaudio"), for: .normal)
-        volumeView.tintColor = .white // Customize the button color
-        return volumeView
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let view = AVRoutePickerView()
+        view.activeTintColor = .white
+        view.tintColor = .white
+        return view
     }
 
-    func updateUIView(_ uiView: MPVolumeView, context: Context) {}
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
 }
