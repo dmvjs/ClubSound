@@ -57,34 +57,15 @@ final class AudioManager {
 
         engine.prepare()
         try? engine.start()
-
-        NotificationCenter.default.addObserver(
-            forName: NSNotification.Name("LanguageChanged"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.handleLanguageChange() }
-        }
     }
 
-    private func handleLanguageChange() {
+    /// Stops playback and removes every active sample. Used when the root
+    /// view tree is about to be torn down (e.g. on language change) so the
+    /// engine state and the view state stay consistent.
+    func reset() {
         stopAllPlayers()
-        activeSamples.removeAll()
-
-        players.removeAll()
-        mixers.removeAll()
-        varispeedNodes.removeAll()
-        timePitchNodes.removeAll()
-        buffers.removeAll()
-
-        engine.stop()
-
-        Task {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            setupEngine()
-            engine.prepare()
-            try? engine.start()
-            isPlaying = false
+        for sample in samples where activeSamples.contains(sample.id) {
+            removeSampleFromPlay(sample)
         }
     }
 

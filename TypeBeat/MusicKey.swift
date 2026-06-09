@@ -4,7 +4,7 @@ enum MusicKey: String, CaseIterable, Comparable {
     case C, CSharp, D, DSharp, E, F, FSharp, G, GSharp, A, ASharp, B
 
     var localizedName: String {
-        LanguageManager.shared.localizedString(for: "key.\(rawValue.lowercased())")
+        "key.\(rawValue.lowercased())".localized
     }
 
     var color: Color {
