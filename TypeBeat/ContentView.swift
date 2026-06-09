@@ -108,11 +108,12 @@ struct ContentView: View {
                                 onSelection: { bpm in handleBPMSelection(bpm, proxy) }
                             )
                             .zIndex(2)
+                            Spacer(minLength: 0)
                         }
                         .padding(.trailing, 6)
-                        // Lift the scrubber columns above the now-playing strip
-                        // (master volume + per-song tabs) so they sit just over
-                        // the top of the volume tab rather than overlapping it.
+                        // Reserve the bottom area occupied by the now-playing
+                        // strip + control row, then center the scrubber columns
+                        // in the remaining space above it.
                         .padding(.bottom, bottomReserveForScrubbers)
                     }
                     .background(Color.black)
@@ -143,7 +144,7 @@ struct ContentView: View {
         let mainVolume: CGFloat = audioManager.activeSamples.isEmpty ? 0 : 56
         let perSongRow: CGFloat = 56
         let songRows = CGFloat(audioManager.activeSamples.count) * perSongRow
-        let buffer: CGFloat = 12
+        let buffer: CGFloat = 28
         return controlRow + mainVolume + songRows + buffer
     }
 
