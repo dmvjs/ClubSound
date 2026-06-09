@@ -1,1 +1,6 @@
 .DS_Store
+
+# Xcode user-specific state — UI layout, breakpoints, scheme management.
+# Tied to a single developer's machine; should not be in version control.
+xcuserdata/
+*.xcuserstate
