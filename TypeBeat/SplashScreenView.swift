@@ -171,7 +171,7 @@ struct SplashScreenView: View {
                     .blendMode(.screen)
                     .opacity(markOpacity * 0.9)
                 }
-                .frame(width: 260, height: 230)
+                .frame(width: 260, height: 115)
             }
             .scaleEffect(markScale * breathScale)
             .rotationEffect(.degrees(markRotation))
@@ -294,9 +294,9 @@ private struct InfinityShape: Shape {
         let cx = rect.midX
         let cy = rect.midY
         let sx = rect.width * 0.46    // horizontal extent
-        let sy = rect.height * 1.10   // vertical extent (stretched well past
-                                      // the natural ratio for a less elongated,
-                                      // more vertical infinity silhouette)
+        let sy = rect.height * 0.55   // vertical extent — small enough that
+                                      // the chunky stroke stack stays inside
+                                      // the half-height frame without clipping
 
         let steps = 240
         for i in 0...steps {

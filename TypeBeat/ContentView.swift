@@ -93,6 +93,7 @@ struct ContentView: View {
                         }
 
                         VStack(alignment: .trailing, spacing: 8) {
+                            Spacer(minLength: 0)
                             KeyIndexView(
                                 groupedSamples: groupedSamples,
                                 activeKey: activeKey,
@@ -107,9 +108,9 @@ struct ContentView: View {
                                 onSelection: { bpm in handleBPMSelection(bpm, proxy) }
                             )
                             .zIndex(2)
+                            Spacer(minLength: 0)
                         }
                         .padding(.trailing, 6)
-                        .padding(.top, 12)
                     }
                     .background(Color.black)
                 }
