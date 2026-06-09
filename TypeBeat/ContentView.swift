@@ -26,19 +26,9 @@ struct ContentView: View {
             
             return (bpm, sortedKeyGroups)
         }.sorted { $0.0 < $1.0 }
-        
-        // Debug print to verify the structure
-        for (bpm, keyGroups) in sortedTempoGroups {
-            let keys = keyGroups.map { $0.0 }
-            print("BPM \(bpm) has keys: \(keys)")
-        }
-        
+
         return sortedTempoGroups
     }
-
-    private let minBPM: Double = 60.0
-    private let maxBPM: Double = 120.0
-    private let keyColumnWidth: CGFloat = 48  // Width of key column + padding
 
     var body: some View {
         NavigationStack {
@@ -112,28 +102,6 @@ struct ContentView: View {
         }
     }
 
-    private func setupBackgroundAudio() {
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
-            try AVAudioSession.sharedInstance().setActive(true)
-        } catch {
-            print("Failed to set up background audio: \(error)")
-        }
-    }
-
-    private func selectInitialBPM() {
-        if activeBPM == nil {
-            activeBPM = 84
-        }
-    }
-
-    private func initializeVolumes() {
-        for sample in samples {
-            sampleVolumes[sample.id] = 0.0
-        }
-        audioManager.setMasterVolume(mainVolume)  // Set initial master volume
-    }
-
     private func addToNowPlaying(sample: Sample) {
         guard nowPlaying.count < 4,
               !nowPlaying.contains(where: { $0.id == sample.id }) else { return }
@@ -156,10 +124,6 @@ struct ContentView: View {
 
     private func isInPlaylist(_ sample: Sample) -> Bool {
         nowPlaying.contains(where: { $0.id == sample.id })
-    }
-
-    func loopProgress() -> Double {
-        audioManager.loopProgress()
     }
 
     private func handleBPMSelection(_ bpm: Double, _ proxy: ScrollViewProxy) {
