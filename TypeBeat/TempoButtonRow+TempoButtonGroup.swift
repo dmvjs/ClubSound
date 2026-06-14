@@ -3,7 +3,7 @@ import SwiftUI
 struct TempoButtonGroup: View {
     let audioManager: AudioManager
     let buttonSize: CGFloat
-    
+
     var body: some View {
         ForEach([69, 84, 94, 102], id: \.self) { bpm in
             Button(action: {
@@ -14,7 +14,7 @@ struct TempoButtonGroup: View {
             }
         }
     }
-    
+
     private func bpmButtonLabel(for bpm: Int) -> some View {
         let isActive = audioManager.bpm == Double(bpm)
         return Text("\(bpm)")
