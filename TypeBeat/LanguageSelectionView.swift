@@ -1,40 +1,41 @@
 import SwiftUI
 
-struct Language {
-    let code: String
-    let name: String
-}
-
 struct LanguageSelectionView: View {
-    @Environment(\.dismiss) var dismiss
-    @State private var showingConfirmation = false
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("AppLanguage") private var language: String = "en"
+
     @State private var pendingLanguage: String?
-    
-    private let languages = [
-        Language(code: "en", name: "English"),
-        Language(code: "es", name: "Español"),
-        Language(code: "fr", name: "Français"),
-        Language(code: "de", name: "Deutsch"),
-        Language(code: "ja", name: "日本語"),
-        Language(code: "ko", name: "한국어"),
-        Language(code: "zh", name: "中文")
+    @State private var showingConfirmation = false
+
+    private struct Language: Identifiable {
+        let id: String
+        let name: String
+        init(_ id: String, _ name: String) { self.id = id; self.name = name }
+    }
+
+    private let languages: [Language] = [
+        .init("en", "English"),
+        .init("es", "Español"),
+        .init("fr", "Français"),
+        .init("de", "Deutsch"),
+        .init("ja", "日本語"),
+        .init("ko", "한국어"),
+        .init("zh", "中文")
     ]
-    
+
     var body: some View {
-        NavigationView {
-            List(languages, id: \.code) { language in
-                Button(action: {
-                    if language.code != LanguageManager.shared.currentLanguage {
-                        pendingLanguage = language.code
-                        showingConfirmation = true
-                    }
-                }) {
+        NavigationStack {
+            List(languages) { lang in
+                Button {
+                    guard lang.id != language else { return }
+                    pendingLanguage = lang.id
+                    showingConfirmation = true
+                } label: {
                     HStack {
-                        Text(language.name)
+                        Text(lang.name)
                         Spacer()
-                        if language.code == LanguageManager.shared.currentLanguage {
-                            Image(systemName: "checkmark")
-                                .foregroundColor(.blue)
+                        if lang.id == language {
+                            Image(systemName: "checkmark").foregroundColor(.blue)
                         }
                     }
                 }
@@ -44,20 +45,23 @@ struct LanguageSelectionView: View {
                 Button("language.change.cancel".localized, role: .cancel) {
                     pendingLanguage = nil
                 }
-                Button("language.change.confirm".localized) {
-                    if let newLanguage = pendingLanguage {
-                        AudioManager.shared.stopAllPlayers()
-                        UserDefaults.standard.set(newLanguage, forKey: "AppLanguage")
-                        UserDefaults.standard.synchronize()
-                        dismiss()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            NotificationCenter.default.post(name: NSNotification.Name("LanguageChanged"), object: nil)
-                        }
-                    }
-                }
+                Button("language.change.confirm".localized, action: confirmLanguageChange)
             } message: {
                 Text("language.change.message".localized)
             }
         }
     }
-} 
+
+    private func confirmLanguageChange() {
+        guard let newLanguage = pendingLanguage else { return }
+        dismiss()
+        // Let the sheet dismissal animate before triggering the root view
+        // rebuild that the @AppStorage change causes (via .id(language) in
+        // ClubSoundApp). The audio engine and AudioManager survive the
+        // rebuild, so playback continues uninterrupted.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            language = newLanguage
+        }
+    }
+}

@@ -1,4 +1,5 @@
 import SwiftUI
+
 struct SampleRecordView: View {
     let sample: Sample
     let isInPlaylist: Bool
@@ -7,8 +8,8 @@ struct SampleRecordView: View {
 
     var body: some View {
         Text(sample.title)
-            .font(.system(size: 16))
-            .foregroundColor(.white.opacity(0.9))
+            .font(.system(size: 16, weight: isInPlaylist ? .semibold : .regular))
+            .foregroundStyle(isInPlaylist ? AnyShapeStyle(sample.key.color) : AnyShapeStyle(Color.white.opacity(0.9)))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)

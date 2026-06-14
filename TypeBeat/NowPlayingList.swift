@@ -1,50 +1,30 @@
-//
-//  NowPlayingList.swift
-//  ClubSound
-//
-//  Created by Kirk Elliott on 12/6/24.
-//
-
-
 import SwiftUI
 
 struct NowPlayingList: View {
-    @Binding var nowPlaying: [Sample]
-    @Binding var sampleVolumes: [Int: Float]
-    @ObservedObject var audioManager: AudioManager
-    let removeFromNowPlaying: (Sample) -> Void
-    
+    let audioManager: AudioManager
+
     var body: some View {
         List {
-            ForEach(nowPlaying, id: \.id) { sample in
+            ForEach(audioManager.activeSamples, id: \.id) { sample in
                 NowPlayingRow(
                     sample: sample,
                     volume: Binding(
-                        get: { sampleVolumes[sample.id] ?? 0.5 },
-                        set: { newValue in
-                            DispatchQueue.main.async {
-                                sampleVolumes[sample.id] = newValue
-                                audioManager.setVolume(for: sample, volume: newValue)
-                            }
-                        }
+                        get: { audioManager.volumes[sample.id] ?? 0 },
+                        set: { audioManager.setVolume(for: sample, volume: $0) }
                     ),
-                    remove: { 
-                        DispatchQueue.main.async {
-                            removeFromNowPlaying(sample)
-                        }
-                    },
-                    keyColor: sample.keyColor(),
+                    remove: { audioManager.removeSampleFromPlay(sample) },
                     audioManager: audioManager
                 )
-                .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                .listRowInsets(EdgeInsets(top: 8, leading: 6, bottom: 8, trailing: 6))
                 .listRowSeparator(.hidden)
                 .accessibilityIdentifier("now-playing-row-\(sample.id)")
             }
         }
-        .listStyle(PlainListStyle())
-        .frame(height: CGFloat(nowPlaying.count) * 60 + 10)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .frame(height: CGFloat(audioManager.activeSamples.count) * 60 + 10)
         .frame(maxWidth: .infinity)
-        .animation(.easeInOut, value: nowPlaying.count)
+        .animation(.easeInOut, value: audioManager.activeSamples.count)
         .accessibilityIdentifier("now-playing-list")
     }
 }

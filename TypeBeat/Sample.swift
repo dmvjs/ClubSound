@@ -1,62 +1,12 @@
-//
-//  Sample.swift
-//  Looper
-//
-//  Created by Kirk Elliott on 11/28/24.
-//
-
-import SwiftUI
 import Foundation
-
 
 struct Sample: Identifiable {
     let id: Int
-    private let _title: String
+    let title: String
     let key: MusicKey
     let bpm: Double
     let fileName: String
-    
-    var title: String { _title }
-    
-    init(id: Int, title: String, key: MusicKey, bpm: Double, fileName: String) {
-        self.id = id
-        self._title = title
-        self.key = key
-        self.bpm = bpm
-        self.fileName = fileName
-    }
-    
-    func keyColor() -> Color {
-        let subduedColors: [MusicKey: Color] = [
-            .C: Color(red: 0.20, green: 0.20, blue: 0.50),
-            .CSharp: Color(red: 0.40, green: 0.20, blue: 0.50),
-            .D: Color(red: 0.60, green: 0.20, blue: 0.30),
-            .DSharp: Color(red: 0.70, green: 0.50, blue: 0.20),
-            .E: Color(red: 0.80, green: 0.40, blue: 0.20),
-            .F: Color(red: 0.60, green: 0.20, blue: 0.20),
-            .FSharp: Color(red: 0.20, green: 0.50, blue: 0.20),
-            .G: Color(red: 0.50, green: 0.50, blue: 0.20),
-            .GSharp: Color(red: 0.20, green: 0.60, blue: 0.60),
-            .A: Color(red: 0.30, green: 0.40, blue: 0.50),
-            .ASharp: Color(red: 0.60, green: 0.40, blue: 0.50),
-            .B: Color(red: 0.20, green: 0.20, blue: 0.50)
-        ]
-        return subduedColors[key] ?? Color.gray
-    }
-
-    /// Returns a gradient color associated with the sample's key for decorative purposes.
-    func keyGradientColors(intensity: Double = 0.5) -> [Color] {
-        let baseColor = self.keyColor()
-        return [
-            baseColor.opacity(intensity),
-            baseColor.opacity(intensity * 0.5)
-        ]
-    }
 }
-
-let sample1 = Sample(id: 1, title: "I Yi Yi", key: .FSharp, bpm: 94, fileName: "00000001-body")
-let sample2 = Sample(id: 4, title: "What's My Name", key: .D, bpm: 94, fileName: "00000004-body")
-let sample3 = Sample(id: 123, title: "Shake That Monkey", key: .C, bpm: 102, fileName: "00000123-body")
 
 let samples: [Sample] = [
     Sample(id: 1, title: "I Yi Yi", key: .FSharp, bpm: 94, fileName: "00000001-body"),

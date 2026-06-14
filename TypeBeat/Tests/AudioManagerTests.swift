@@ -355,10 +355,7 @@ class AudioManagerTests: XCTestCase {
         try await Task.sleep(nanoseconds: 500_000_000)
         
         // Verify player is active
-        guard let player = audioManager.players[sample.id] else {
-            XCTFail("Player should exist")
-            return
-        }
+        XCTAssertNotNil(audioManager.testPlayer(for: sample.id), "Player should exist")
         
         // Get actual playback state
         let isPlaying = audioManager.isPlaying

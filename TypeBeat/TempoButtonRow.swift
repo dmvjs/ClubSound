@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct TempoButtonRow: View {
-    @ObservedObject var audioManager: AudioManager
-    @StateObject private var wakeLockManager = WakeLockManager()
+    let audioManager: AudioManager
+    @State private var wakeLockManager = WakeLockManager()
     @Environment(\.dismiss) private var dismiss
     @State private var showingLanguageSelection = false
     @State private var breatheScale: CGFloat = 1.0
