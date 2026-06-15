@@ -51,4 +51,7 @@
 "language.change.title" = "Confirm Language Change";
 "language.change.message" = "Changing language will restart the app. Continue?";
 "language.change.cancel" = "Cancel";
-"language.change.confirm" = "Change"; 
+"language.change.confirm" = "Change";
+
+// Auto mode
+"auto" = "Auto"; 

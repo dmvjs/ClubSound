@@ -58,3 +58,6 @@
 "language.change.message" = "Die Änderung der Sprache erfordert einen Neustart der App. Fortfahren?";
 "language.change.cancel" = "Abbrechen";
 "language.change.confirm" = "Ändern";
+
+// Auto mode
+"auto" = "Auto";

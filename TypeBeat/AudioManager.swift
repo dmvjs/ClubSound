@@ -58,9 +58,21 @@ final class AudioManager {
 
     private let beatsPerBar = 4.0
     private let totalBars = 16.0
-    private var masterLoopDuration: TimeInterval {
-        beatsPerBar * totalBars * 60.0 / bpm  // 64 beats
+    /// Seconds per master loop iteration (64 beats at the current tempo).
+    /// Internal so AutoDJ and NowPlayingCoordinator can compute remaining
+    /// time and elapsed-playback positions against the same clock.
+    var masterLoopDuration: TimeInterval {
+        beatsPerBar * totalBars * 60.0 / bpm
     }
+
+    /// AutoDJ scheduler — owns the auto-mix toggle, hamiltonian rotation
+    /// state, and the swap task. Created in `init` so it can take a
+    /// back-reference to self.
+    private(set) var autoDJ: AutoDJ!
+
+    /// Bridges audio state to the lock-screen / Control-Center Now Playing
+    /// widget and routes remote commands back into playback.
+    private var nowPlayingCoordinator: NowPlayingCoordinator!
 
     private let engine = AVAudioEngine()
     private var playing: [Int: PlayingSample] = [:]
@@ -109,6 +121,10 @@ final class AudioManager {
         engine.prepare()
         try? engine.start()
         observeOutputVolume()
+        // AutoDJ takes a back-reference to self for tempo/sample mutations.
+        // NowPlayingCoordinator observes both to drive the system widget.
+        autoDJ = AutoDJ(audioManager: self)
+        nowPlayingCoordinator = NowPlayingCoordinator(audioManager: self, autoDJ: autoDJ)
     }
 
     private func observeOutputVolume() {
@@ -144,7 +160,11 @@ final class AudioManager {
             let session = AVAudioSession.sharedInstance()
             try session.setPreferredSampleRate(48000)
             try session.setPreferredIOBufferDuration(0.005)
-            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers, .duckOthers])
+            // No `.mixWithOthers` — that flag opts out of being the primary
+            // audio app, which suppresses the Now Playing widget on the
+            // lock screen / Control Center. For a DJ app we want primary
+            // status so play/pause and metadata show up in the system UI.
+            try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
         } catch {
             print("❌ Failed to set up audio session: \(error.localizedDescription)")
@@ -516,6 +536,7 @@ final class AudioManager {
             await addSampleToPlay(sample)
         }
     }
+
 }
 
 // MARK: - Test hooks

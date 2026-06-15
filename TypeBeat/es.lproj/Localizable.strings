@@ -57,4 +57,7 @@
 "language.change.title" = "Confirmar cambio de idioma";
 "language.change.message" = "Cambiar el idioma reiniciará la aplicación. ¿Continuar?";
 "language.change.cancel" = "Cancelar";
-"language.change.confirm" = "Cambiar"; 
+"language.change.confirm" = "Cambiar";
+
+// Auto mode
+"auto" = "Auto";
