@@ -109,17 +109,14 @@ final class NowPlayingCoordinator {
     }
 
     #if canImport(UIKit)
-    /// Tries the bundled splash asset first, falls back to a generated black
-    /// square so the lock-screen widget never shows the system's "no
-    /// artwork" placeholder.
+    /// Lock-screen artwork. Uses the `artwork` image set in `Assets.xcassets`,
+    /// which is a direct copy of the AppIcon source (`icon.png`, 1024×1024).
+    /// iOS doesn't expose `AppIcon` to `UIImage(named:)` directly, so the
+    /// asset catalog needs an explicit imageset that points at the same
+    /// source bitmap — that way the lock-screen widget shows the identical
+    /// image as the home-screen icon, at full resolution.
     private func artworkImage() -> UIImage? {
-        if let splash = UIImage(named: "splash") { return splash }
-        let size = CGSize(width: 512, height: 512)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { ctx in
-            UIColor.black.setFill()
-            ctx.fill(CGRect(origin: .zero, size: size))
-        }
+        UIImage(named: "artwork")
     }
     #endif
 }

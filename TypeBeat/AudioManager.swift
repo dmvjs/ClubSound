@@ -514,25 +514,15 @@ final class AudioManager {
         play()
     }
 
-    /// Picks two samples in the same key at the active tempo and queues them.
-    /// Falls back to two random samples in the tempo bucket if no key has
-    /// two available at once.
+    /// Picks two samples at the active tempo and queues them. Uses the same
+    /// `HarmonicPairSelector` logic that AutoDJ uses for every subsequent
+    /// pick, so the very first pair gets the full harmonic-interval shuffle
+    /// + 10% wildcard chance — not the alphabetical-first-in-first-key
+    /// pattern the previous ad-hoc selection occasionally produced.
     private func loadDefaultPair() async {
         let targetBPM: Double = (bpm == 69) ? 84 : bpm
         let pool = TypeBeat.samples.filter { $0.bpm == targetBPM }
-        guard !pool.isEmpty else { return }
-
-        let byKey = Dictionary(grouping: pool, by: \.key)
-        let pair: [Sample]
-        if let twoInOneKey = byKey.values.filter({ $0.count >= 2 }).randomElement() {
-            pair = Array(twoInOneKey.shuffled().prefix(2))
-        } else {
-            // Edge case: every key has only one sample at this tempo.
-            // Fall back to any two at the same tempo.
-            pair = Array(pool.shuffled().prefix(2))
-        }
-
-        for sample in pair {
+        for sample in HarmonicPairSelector.pickPair(from: pool) {
             await addSampleToPlay(sample)
         }
     }
