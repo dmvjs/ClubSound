@@ -21,6 +21,29 @@ final class AudioManager {
         didSet { engine.mainMixerNode.outputVolume = masterVolume }
     }
 
+    /// Mirrors `AVAudioSession.outputVolume` (the system media-volume slider /
+    /// hardware rocker), updated via KVO. Views read this directly to drive
+    /// the low-volume warning glow on the play button.
+    var outputVolume: Float = AVAudioSession.sharedInstance().outputVolume
+
+    /// Severity level for the play-button volume badge. Tuned for a 16-step
+    /// iPhone speaker (each notch ≈ 0.0625):
+    ///   .muted — exactly zero (no audio)              → red, slashed-speaker
+    ///   .low   — first notch only (≤ 0.07 ≈ 1/16)    → yellow, one-wave
+    ///   .ok    — anything louder                      → no badge
+    /// Bluetooth/AirPods routes may use 32- or 64-step granularity, in which
+    /// case more than one notch can land in the yellow band.
+    enum VolumeBadge { case muted, low, ok }
+    var volumeBadge: VolumeBadge {
+        switch outputVolume {
+        case ...0.005: .muted
+        case ...0.07:  .low
+        default:       .ok
+        }
+    }
+
+    private var volumeObservation: NSKeyValueObservation?
+
     /// The samples currently in the now-playing strip, in the order they were
     /// added. Views observe this directly; it survives view-tree rebuilds
     /// (e.g. on language change) because it lives in the @MainActor singleton.
@@ -85,6 +108,20 @@ final class AudioManager {
         setupEngine()
         engine.prepare()
         try? engine.start()
+        observeOutputVolume()
+    }
+
+    private func observeOutputVolume() {
+        let session = AVAudioSession.sharedInstance()
+        outputVolume = session.outputVolume
+        // KVO callback may fire off the main thread; bounce to MainActor
+        // because `outputVolume` is observable UI state.
+        volumeObservation = session.observe(\.outputVolume, options: [.new]) { [weak self] session, _ in
+            let newVolume = session.outputVolume
+            Task { @MainActor [weak self] in
+                self?.outputVolume = newVolume
+            }
+        }
     }
 
     /// Stops playback and removes every active sample.
@@ -296,29 +333,59 @@ final class AudioManager {
 
         guard let entry = playing[sample.id] else { return }
 
-        // Trigger the delay (DJ-style echo trail) on what's currently in
-        // the chain, then ramp the mixer to silence over the tail. The
-        // player stops feeding the delay, so what echoes is the buffered
-        // tail of the last fragment, decaying through feedback.
+        // DJ outro: backspin into a half-beat echo tail, master tempo
+        // untouched so the surviving samples keep the grid.
+        //
+        // Phase 1 — backspin: a randomized cubic-bezier velocity envelope
+        // takes varispeed.rate from the sample's current rate, slingshots
+        // it UP to a peak around 1.4–2.5× (hand pushing the platter
+        // forward to wind up), then crashes it to varispeed's floor of
+        // 0.25 (the yank-back). The lift happens because P1.y goes
+        // negative: in our rate formula `start + (floor − start) * curve`,
+        // a negative curve value inverts the sign and lifts the rate
+        // ABOVE startRate before the cubic term hauls it back to 1
+        // (= floor). Player keeps feeding the chain so the delay buffer
+        // captures the whole slingshot + crash as a warbling tail.
+        //
+        // Phase 2 — echo tail: stop the player, flip delay fully wet, ramp
+        // the mixer to silence over the tail.
         let beat = 60.0 / bpm
+        // Snappy range — feels like a flick of the wrist, not a slow brake.
+        let backspinDuration = beat * Double.random(in: 0.35...0.65)
+        // P1.y negative → curve dips below 0 → rate lifts above start.
+        // Range tuned so peak rate lands roughly between 1.4× and 2.5×.
+        // P2.y mid-low → return ramps gently before the cubic crash to 1.
+        let p1y = Float.random(in: -5.0 ... -1.5)
+        let p2y = Float.random(in: 0.10 ... 0.45)
+        let backspinFloor: Float = 0.25   // AVAudioUnitVarispeed minimum
+        let backspinCeiling: Float = 4.0  // AVAudioUnitVarispeed maximum
+        let startRate = entry.varispeed.rate
         let delayTime = beat / 2          // half-beat echo (sync to grid)
         let feedback: Float = 55          // each repeat ≈ 55% of the previous
         let tailSeconds = delayTime * 5   // ~5 echoes before silence
-
-        entry.delay.delayTime = delayTime
-        entry.delay.feedback = feedback
-        entry.delay.lowPassCutoff = 5000  // warm/vintage tape feel
-        entry.delay.wetDryMix = 100       // wet only — dry sample has stopped
-
-        entry.player.stop()
-
-        // Smooth mixer fade so the echo tail rides out gracefully instead
-        // of getting hard-cut at the end of the tail window.
-        rampMixer(entry.mixer, to: 0, over: tailSeconds)
-
-        // Final cleanup after the tail completes.
         let id = sample.id
+
         Task { @MainActor in
+            let steps = max(12, Int(backspinDuration * 60))    // ~60 Hz update
+            let stepDuration = backspinDuration / Double(steps)
+            for i in 1...steps {
+                let t = Float(i) / Float(steps)
+                let u = 1 - t
+                // Cubic bezier y(t) with P0.y=0, P3.y=1. Negative P1.y
+                // lets the curve overshoot below zero mid-flight.
+                let curve = 3 * u * u * t * p1y + 3 * u * t * t * p2y + t * t * t
+                let rate = startRate + (backspinFloor - startRate) * curve
+                entry.varispeed.rate = max(backspinFloor, min(backspinCeiling, rate))
+                try? await Task.sleep(for: .seconds(stepDuration))
+            }
+
+            entry.delay.delayTime = delayTime
+            entry.delay.feedback = feedback
+            entry.delay.lowPassCutoff = 5000                   // warm/vintage tape feel
+            entry.delay.wetDryMix = 100                        // wet only — dry sample has stopped
+            entry.player.stop()
+            rampMixer(entry.mixer, to: 0, over: tailSeconds)
+
             try? await Task.sleep(for: .seconds(tailSeconds + 0.1))
             guard let pending = playing.removeValue(forKey: id) else { return }
             pending.player.stop()

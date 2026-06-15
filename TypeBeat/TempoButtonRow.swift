@@ -27,7 +27,7 @@ struct TempoButtonRow: View {
                     breatheScale: $breatheScale,
                     buttonSize: buttonSize
                 )
-                
+
                 TempoButtonGroup(
                     audioManager: audioManager,
                     buttonSize: buttonSize
