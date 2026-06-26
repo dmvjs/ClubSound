@@ -16,7 +16,7 @@ struct NowPlayingRow: View {
 
                 // Progress ring — re-renders on every display frame while
                 // playback is active, frozen otherwise.
-                TimelineView(.animation(paused: !audioManager.isPlaying)) { _ in
+                TimelineView(.animation(minimumInterval: 0.05, paused: !audioManager.isPlaying)) { _ in
                     let progress = audioManager.loopProgress()
                     Circle()
                         .trim(from: 0, to: CGFloat(progress))

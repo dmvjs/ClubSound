@@ -2,28 +2,27 @@ import SwiftUI
 
 struct ControlButtonGroup: View {
     let audioManager: AudioManager
-    @Bindable var wakeLockManager: WakeLockManager
     @Binding var showingLanguageSelection: Bool
     @Binding var breatheScale: CGFloat
     let buttonSize: CGFloat
-    
+
     var body: some View {
         Group {
             audioPickerButton
+            AutoModeButton(audioManager: audioManager, buttonSize: buttonSize)
             playPauseButton
             pitchLockButton
-            wakeLockButton
             languageButton
         }
     }
-    
+
     private var audioPickerButton: some View {
         AudioOutputPicker()
             .frame(width: buttonSize, height: buttonSize)
             .background(Circle().fill(Color.blue))
             .shadow(color: .blue.opacity(0.4), radius: 7, x: 0, y: 4)
     }
-    
+
     private var playPauseButton: some View {
         let buttonSize = max(self.buttonSize, 44) // Ensure minimum size
 
@@ -74,7 +73,7 @@ struct ControlButtonGroup: View {
             EmptyView()
         }
     }
-    
+
     private var pitchLockButton: some View {
         Button {
             audioManager.pitchLock.toggle()
@@ -87,24 +86,6 @@ struct ControlButtonGroup: View {
                 .shadow(color: audioManager.pitchLock ? Color.green.opacity(0.4) : .clear, radius: 7, x: 0, y: 4)
         }
         .accessibilityLabel("lock_pitch".localized)
-    }
-
-    private var wakeLockButton: some View {
-        Button {
-            if wakeLockManager.isWakeLockEnabled {
-                wakeLockManager.disableWakeLock()
-            } else {
-                wakeLockManager.enableWakeLock()
-            }
-        } label: {
-            Image(systemName: wakeLockManager.isWakeLockEnabled ? "sun.max.fill" : "sun.max")
-                .font(.system(size: buttonSize * 0.5))
-                .foregroundColor(wakeLockManager.isWakeLockEnabled ? .black : .white)
-                .frame(width: buttonSize, height: buttonSize)
-                .circleControlBackground(isActive: wakeLockManager.isWakeLockEnabled)
-                .shadow(color: wakeLockManager.isWakeLockEnabled ? Color.green.opacity(0.4) : .clear, radius: 7, x: 0, y: 4)
-        }
-        .accessibilityLabel("wake_lock".localized)
     }
 
     private var languageButton: some View {
@@ -140,4 +121,3 @@ private struct VolumeBadgeDot: View {
             .allowsHitTesting(false)
     }
 }
-

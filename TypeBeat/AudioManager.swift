@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Observation
+import UIKit
 
 @MainActor
 @Observable
@@ -10,8 +11,26 @@ final class AudioManager {
     var bpm: Double = 84.0 {
         didSet {
             adjustAllPlaybackRates()
-            if isPlaying { startAllPlayersInSync() }
+            if isPlaying && !suppressRestartOnBpmChange { startAllPlayersInSync() }
         }
+    }
+
+    /// When true, a `bpm` assignment only re-applies playback rates — it
+    /// does NOT stop+restart the players. Used by AutoDJ at a tempo seam
+    /// where the incoming pair was already phase-aligned during the
+    /// pre-seam window and is at frame 0 at the wrap; restarting would
+    /// punch a sample-scheduling gap into the audio.
+    private var suppressRestartOnBpmChange: Bool = false
+
+    /// Apply a tempo change without the player-restart side effect.
+    /// Caller is responsible for ensuring the live players are already
+    /// at a phase that makes the rate switch sound continuous (which
+    /// AutoDJ guarantees by pre-staging incoming for a full loop window
+    /// at the new sample tempo before calling this).
+    func setBpmContinuous(_ newBPM: Double) {
+        suppressRestartOnBpmChange = true
+        defer { suppressRestartOnBpmChange = false }
+        bpm = newBPM
     }
     var pitchLock: Bool = false {
         didSet { adjustAllPlaybackRates() }
@@ -77,6 +96,14 @@ final class AudioManager {
     private let engine = AVAudioEngine()
     private var playing: [Int: PlayingSample] = [:]
 
+    /// IDs whose backspin/echo-tail outro is in flight. Such entries are
+    /// still in `playing` (the engine graph needs to render their tail)
+    /// but must be excluded from any bulk re-schedule — otherwise a
+    /// BPM-change restart would yank them back to frame 0 mid-outro,
+    /// briefly playing the buffer loud before the backspin's own stop
+    /// catches up, and breaking phase with the live samples.
+    private var removingSampleIDs: Set<Int> = []
+
     /// Audio sample-clock position at which the current playback session
     /// began. Elapsed-time queries (loopProgress, phase calculations) measure
     /// against this — sample time doesn't drift relative to what the audio
@@ -94,7 +121,7 @@ final class AudioManager {
     /// timeline starts at zero); measure elapsed via the returned sample
     /// position. Both reference the same render-cycle moment, so they're
     /// internally consistent.
-    private func futureStart(leadSeconds: TimeInterval = 0.02)
+    private func futureStart(leadSeconds: TimeInterval = 0.05)
         -> (time: AVAudioTime, sample: AVAudioFramePosition)? {
         guard let renderTime = engine.outputNode.lastRenderTime,
               renderTime.isSampleTimeValid else { return nil }
@@ -121,10 +148,65 @@ final class AudioManager {
         engine.prepare()
         try? engine.start()
         observeOutputVolume()
+        observeInterruptions()
         // AutoDJ takes a back-reference to self for tempo/sample mutations.
         // NowPlayingCoordinator observes both to drive the system widget.
         autoDJ = AutoDJ(audioManager: self)
         nowPlayingCoordinator = NowPlayingCoordinator(audioManager: self, autoDJ: autoDJ)
+    }
+
+    /// Handles iOS interrupting our audio (alarm, call, Siri) and engine
+    /// configuration changes (route swap, sample-rate flip). On `.began`
+    /// we wind down so the UI matches reality; on `.ended` (or after a
+    /// route change) we reactivate the session and restart the engine so
+    /// the next play tap can rebuild cleanly.
+    private func observeInterruptions() {
+        let nc = NotificationCenter.default
+        nc.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                switch type {
+                case .began:
+                    self.stopAllPlayers()
+                case .ended:
+                    try? AVAudioSession.sharedInstance().setActive(true)
+                    if !self.engine.isRunning { try? self.engine.start() }
+                @unknown default: break
+                }
+            }
+        }
+        nc.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.stopAllPlayers()
+                if !self.engine.isRunning { try? self.engine.start() }
+            }
+        }
+        nc.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if !self.engine.isRunning { try? self.engine.start() }
+                // Do NOT touch AutoDJ here. Re-adopting on foreground
+                // can fire mid-swap (incoming already added, outgoing
+                // not yet removed) and silently fade out the wrong
+                // pair. The wait loops are background-tolerant; they
+                // catch up on their own when the app resumes.
+            }
+        }
     }
 
     private func observeOutputVolume() {
@@ -352,6 +434,11 @@ final class AudioManager {
         volumes.removeValue(forKey: sample.id)
 
         guard let entry = playing[sample.id] else { return }
+        removingSampleIDs.insert(sample.id)
+
+        // Duck the outro a hair below max so the backspin + echo tail
+        // doesn't peak louder than the surviving samples.
+        entry.mixer.outputVolume = min(entry.mixer.outputVolume, 0.77)
 
         // DJ outro: backspin into a half-beat echo tail, master tempo
         // untouched so the surviving samples keep the grid.
@@ -407,6 +494,7 @@ final class AudioManager {
             rampMixer(entry.mixer, to: 0, over: tailSeconds)
 
             try? await Task.sleep(for: .seconds(tailSeconds + 0.1))
+            removingSampleIDs.remove(id)
             guard let pending = playing.removeValue(forKey: id) else { return }
             pending.player.stop()
             engine.detach(pending.mixer)
@@ -419,6 +507,27 @@ final class AudioManager {
                 masterStartSample = nil
                 isPlaying = false
             }
+        }
+    }
+
+    /// Hard-stop and tear down a sample with no backspin and no echo tail.
+    /// Used by AutoDJ on tempo-rollover swaps where the seam needs to be a
+    /// clean cut from old tempo to new — the DJ-outro effect is for
+    /// normal mid-tempo swaps only.
+    func instantStopAndRemove(_ sample: Sample) {
+        activeSamples.removeAll { $0.id == sample.id }
+        volumes.removeValue(forKey: sample.id)
+        removingSampleIDs.remove(sample.id)
+        guard let entry = playing.removeValue(forKey: sample.id) else { return }
+        entry.player.stop()
+        engine.detach(entry.mixer)
+        engine.detach(entry.varispeed)
+        engine.detach(entry.timePitch)
+        engine.detach(entry.delay)
+        engine.detach(entry.player)
+        if playing.isEmpty {
+            masterStartSample = nil
+            isPlaying = false
         }
     }
 
@@ -462,14 +571,15 @@ final class AudioManager {
         guard let start = futureStart() else { return }
         masterStartSample = start.sample
 
-        for entry in playing.values {
+        let live = playing.values.filter { !removingSampleIDs.contains($0.sample.id) }
+        for entry in live {
             entry.player.stop()
             entry.player.reset()
         }
-        for entry in playing.values {
+        for entry in live {
             entry.player.scheduleBuffer(entry.buffer, at: start.time, options: [.loops], completionHandler: nil)
         }
-        for entry in playing.values {
+        for entry in live {
             entry.player.play()
         }
     }

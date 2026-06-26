@@ -5,7 +5,7 @@ struct TempoButtonGroup: View {
     let buttonSize: CGFloat
 
     var body: some View {
-        ForEach([69, 84, 94, 102], id: \.self) { bpm in
+        ForEach([84, 94, 102], id: \.self) { bpm in
             Button(action: {
                 audioManager.bpm = Double(bpm)
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -19,7 +19,7 @@ struct TempoButtonGroup: View {
         let isActive = audioManager.bpm == Double(bpm)
         return Text("\(bpm)")
             .font(.system(size: buttonSize * 0.4, weight: .bold, design: .rounded))
-            .foregroundColor(isActive ? .black : .white)
+            .foregroundColor(isActive ? .black : .white.opacity(0.6))
             .minimumScaleFactor(0.5)
             .lineLimit(1)
             .frame(width: buttonSize, height: buttonSize)

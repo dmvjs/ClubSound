@@ -45,7 +45,6 @@ final class AutoDJ {
 
     private let audioManager: AudioManager
     private var task: Task<Void, Never>?
-    private var currentPair: [Sample] = []
     private var unplayedIDs: Set<Int>
     private var bpmIndex: Int
     private var swapsAtBPM: Int
@@ -110,7 +109,6 @@ final class AutoDJ {
     private func stop() {
         task?.cancel()
         task = nil
-        currentPair = []
         persist()
     }
 
@@ -132,40 +130,33 @@ final class AutoDJ {
         }
     }
 
-    /// Adopts whatever's currently playing into `currentPair`:
-    ///   0 samples → bail (caller should never get here, defensive)
-    ///   1 sample  → keep as song 1, add a partner at the next wrap
-    ///   2 samples → adopt as-is
-    ///   >2        → trim extras at half-beat intervals from next wrap
+    /// Trim any extras above two so the next swap cycle can add its
+    /// incoming pair without hitting the 4-sample cap. 0/1/2 samples
+    /// already playing is fine — the cycle just treats whatever's
+    /// playing as the outgoing pair when its time comes.
     private func adoptInitialSamples() async {
         let initial = audioManager.activeSamples
-        switch initial.count {
-        case 0:
-            return
-        case 1:
-            currentPair = initial
-            await waitUntilLoopWrap()
-            guard !Task.isCancelled, isEnabled else { return }
-            let pool = unplayedPool(at: audioManager.bpm, excluding: Set(initial.map(\.id)))
-            if let partner = HarmonicPairSelector.pickPair(from: pool).first {
-                await audioManager.addSampleToPlay(partner)
-                audioManager.setVolume(for: partner, volume: Self.targetVolume)
-                markPlayed([partner])
-                currentPair.append(partner)
+        if initial.count > 2 {
+            await fadeOutAndRemove(Array(initial.suffix(from: 2)), over: 2.0)
+        }
+    }
+
+    /// Ramps each sample's mixer from its current volume to 0 over
+    /// `duration`, then hands off to `removeSampleFromPlay` so the engine
+    /// graph cleanup matches the normal removal path.
+    private func fadeOutAndRemove(_ samples: [Sample], over duration: TimeInterval) async {
+        let steps = max(8, Int(duration * 30))
+        let stepDur = duration / Double(steps)
+        let starts = samples.map { audioManager.volumes[$0.id] ?? 0 }
+        for i in 1...steps {
+            let t = Float(i) / Float(steps)
+            for (sample, start) in zip(samples, starts) {
+                audioManager.setVolume(for: sample, volume: start * (1 - t))
             }
-        case 2:
-            currentPair = initial
-        default:
-            currentPair = Array(initial.prefix(2))
-            let extras = Array(initial.suffix(from: 2))
-            await waitUntilLoopWrap()
-            guard !Task.isCancelled, isEnabled else { return }
-            let beat = 60.0 / audioManager.bpm
-            for (i, sample) in extras.enumerated() {
-                try? await Task.sleep(for: .seconds(beat * 0.5 * Double(i + 1)))
-                guard !Task.isCancelled, isEnabled else { return }
-                audioManager.removeSampleFromPlay(sample)
-            }
+            try? await Task.sleep(for: .seconds(stepDur))
+        }
+        for sample in samples {
+            audioManager.removeSampleFromPlay(sample)
         }
     }
 
@@ -178,12 +169,24 @@ final class AutoDJ {
         await waitUntilSecondsBeforeLoopEnd(5.0)
         guard !Task.isCancelled, isEnabled else { return }
 
+        // Resync to the master tempo in case the user tapped a BPM button
+        // while auto was running — otherwise the transition rotates from
+        // our stale index and can skip the user's current bucket.
+        if let idx = Self.bpmRotation.firstIndex(of: audioManager.bpm) {
+            bpmIndex = idx
+        }
+
         let isTransition = swapsAtBPM >= Self.swapsPerBPM - 1
         let nextIdx = (bpmIndex + 1) % Self.bpmRotation.count
         let pickBPM = isTransition ? Self.bpmRotation[nextIdx] : audioManager.bpm
         if isTransition { ensureSufficientPool(at: pickBPM) }
 
-        let pool = unplayedPool(at: pickBPM, excluding: Set(currentPair.map(\.id)))
+        // The pair being handed off IS whatever's playing right now —
+        // no tracked state to fall out of sync with reality. If only
+        // one sample is playing, only one is removed; if zero, none.
+        let outgoing = audioManager.activeSamples
+
+        let pool = unplayedPool(at: pickBPM, excluding: Set(outgoing.map(\.id)))
         let incoming = HarmonicPairSelector.pickPair(from: pool)
         guard !incoming.isEmpty else {
             // Pool depleted mid-rotation — skip ahead to next bucket.
@@ -202,15 +205,25 @@ final class AutoDJ {
 
         await waitUntilBeatsBeforeLoopEnd(4)
         guard !Task.isCancelled, isEnabled else { return }
-        if let first = currentPair.first { audioManager.removeSampleFromPlay(first) }
+        if let first = outgoing.first { audioManager.removeSampleFromPlay(first) }
 
         await waitUntilBeatsBeforeLoopEnd(2)
         guard !Task.isCancelled, isEnabled else { return }
-        if currentPair.count > 1 { audioManager.removeSampleFromPlay(currentPair[1]) }
+        if outgoing.count > 1 { audioManager.removeSampleFromPlay(outgoing[1]) }
 
         await waitUntilLoopWrap()
         guard !Task.isCancelled, isEnabled else { return }
-        currentPair = incoming
+
+        // Belt-and-suspenders: any outgoing still in activeSamples at the
+        // wrap means the timed 4/2-beat removes missed (e.g. backgrounded
+        // mid-cycle and the awaits overshot). Sweep them now so we don't
+        // carry a stale pair into the next cycle and starve incoming on
+        // the 4-sample cap.
+        for sample in outgoing
+            where audioManager.activeSamples.contains(where: { $0.id == sample.id }) {
+            audioManager.removeSampleFromPlay(sample)
+        }
+
         if isTransition {
             bpmIndex = nextIdx
             audioManager.bpm = Self.bpmRotation[bpmIndex]
@@ -218,6 +231,7 @@ final class AutoDJ {
         } else {
             swapsAtBPM += 1
         }
+
         persist()
     }
 
@@ -260,8 +274,8 @@ final class AutoDJ {
     private func waitUntilSecondsBeforeLoopEnd(_ seconds: Double) async {
         while !Task.isCancelled, isEnabled {
             let remaining = loopRemainingSeconds()
-            if remaining <= seconds + 0.04 { return }
-            let sleep = max(0.02, min(remaining - seconds, 0.2))
+            if remaining <= seconds + 0.1 { return }
+            let sleep = max(0.1, min(remaining - seconds, 0.2))
             try? await Task.sleep(for: .seconds(sleep))
         }
     }
@@ -271,11 +285,12 @@ final class AutoDJ {
     }
 
     private func waitUntilLoopWrap() async {
-        let before = audioManager.loopProgress()
+        var last = audioManager.loopProgress()
         while !Task.isCancelled, isEnabled {
-            try? await Task.sleep(for: .seconds(0.04))
+            try? await Task.sleep(for: .seconds(0.1))
             let now = audioManager.loopProgress()
-            if now < before - 0.3 { return }
+            if now < last - 0.3 { return }
+            last = now
         }
     }
 

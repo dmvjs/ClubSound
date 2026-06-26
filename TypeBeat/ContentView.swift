@@ -94,14 +94,6 @@ struct ContentView: View {
                             // re-layout).
                             GlassGroup {
                                 VStack(spacing: 0) {
-                                    HStack {
-                                        AutoModeButton(audioManager: audioManager)
-                                        Spacer(minLength: 0)
-                                    }
-                                    .padding(.horizontal, 12)
-                                    .padding(.top, 6)
-                                    .padding(.bottom, 12)
-
                                     if !audioManager.activeSamples.isEmpty {
                                         NowPlayingView(audioManager: audioManager)
                                     }
@@ -161,14 +153,15 @@ struct ContentView: View {
     }
 
     private func addToNowPlaying(sample: Sample) {
-        // AutoDJ owns the now-playing pair while it's running. User
-        // add/remove is gated off until they disable auto.
-        guard !audioManager.autoDJ.isEnabled else { return }
+        // Manual pick implicitly drops out of auto — the user taking the
+        // wheel is a clear signal they don't want the scheduler fighting
+        // them — but the pick itself still goes through.
+        if audioManager.autoDJ.isEnabled { audioManager.autoDJ.isEnabled = false }
         Task { await audioManager.addSampleToPlay(sample) }
     }
 
     private func removeFromNowPlaying(sample: Sample) {
-        guard !audioManager.autoDJ.isEnabled else { return }
+        if audioManager.autoDJ.isEnabled { audioManager.autoDJ.isEnabled = false }
         withAnimation {
             audioManager.removeSampleFromPlay(sample)
         }
