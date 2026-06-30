@@ -612,7 +612,152 @@ class AudioManagerTests: XCTestCase {
         expectation.fulfill()
         await fulfillment(of: [expectation], timeout: 10.0)
     }
-    
+
+    // Reproduces the AutoDJ tempo-transition seam reported as "the fifth set
+    // picks 102 songs but uses the 84 tempo". On a transition swap, AutoDJ
+    // removes the outgoing 102 pair via removeSampleFromPlay (backspin + echo
+    // tail), which keeps the sample alive in `playing` while its tail renders.
+    // It then flips the master bpm to 84 at the loop wrap. The bpm didSet
+    // re-rates EVERY entry in `playing` — including the outgoing 102 sample —
+    // so a 102-bucket sample audibly renders at the 84 master tempo.
+    //
+    // Deterministic: the rate is read immediately after the flip with no
+    // suspension point, so the backspin envelope task cannot run in between;
+    // this isolates the effect of the bpm change alone.
+    @MainActor
+    func testOutgoingSampleNotRePitchedByTempoFlip() async throws {
+        audioManager.stopAllPlayers()
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        let sample = samples.first { $0.bpm == 102.0 }!
+        audioManager.pitchLock = false
+        audioManager.bpm = 102.0
+        await audioManager.addSampleToPlay(sample)
+        audioManager.play()
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        // A 102 sample at master 102 plays at its native rate.
+        XCTAssertEqual(audioManager.getSampleRate(for: sample.id), 1.0, accuracy: 0.001,
+                       "Precondition: 102 sample at 102 master should be rate 1.0")
+
+        // Outgoing pair starts its backspin/echo tail — still in the graph.
+        audioManager.removeSampleFromPlay(sample)
+
+        // The tempo-transition flip. No await before the read.
+        audioManager.bpm = 84.0
+        let rateAfterFlip = audioManager.getSampleRate(for: sample.id)
+
+        XCTAssertEqual(rateAfterFlip, 1.0, accuracy: 0.001,
+            "Outgoing 102 sample was re-pitched to \(rateAfterFlip) (84/102 = \(Float(84.0/102.0))) by the tempo flip — i.e. 102 audio now rendering at 84 tempo")
+    }
+
+    // The clean tempo seam: the incoming pair is pre-staged silently and then
+    // launched exactly at the new tempo on the seam — never sounding at the old
+    // tempo first (the "begin perfectly at its tempo" requirement, with no
+    // fade/backspin/echo).
+    @MainActor
+    func testTempoSeamStartsIncomingAtNewTempoNotOld() async throws {
+        audioManager.stopAllPlayers()
+        try await Task.sleep(nanoseconds: 300_000_000)
+
+        let outgoing = samples.first { $0.bpm == 102.0 }!
+        let incoming = samples.first { $0.bpm == 84.0 }!
+        audioManager.pitchLock = false
+        audioManager.bpm = 102.0
+        await audioManager.addSampleToPlay(outgoing)
+        audioManager.play()
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        // Pre-stage the incoming 84 pair silently for the seam.
+        await audioManager.addSampleToPlay(incoming, scheduleNow: false)
+        XCTAssertTrue(audioManager.activeSamples.contains { $0.id == incoming.id },
+                      "Pre-staged pair should be in the now-playing list")
+        XCTAssertFalse(audioManager.isPlayerStarted(for: incoming.id),
+                       "Pre-staged seam pair must be silent (not started) before the seam")
+        // Until the seam it's merely wired at the current master rate (102/84).
+        XCTAssertEqual(audioManager.getSampleRate(for: incoming.id), Float(102.0/84.0), accuracy: 0.001)
+
+        // Commit the seam to 84.
+        audioManager.commitTempoSeam(outgoing: [outgoing], incoming: [incoming],
+                                     newBPM: 84.0, volume: 0.7)
+
+        // The incoming pair now starts — at the NEW tempo (84/84 = 1.0),
+        // never the old 102.
+        XCTAssertTrue(audioManager.isPlayerStarted(for: incoming.id),
+                      "Seam should launch the incoming pair")
+        XCTAssertEqual(audioManager.getSampleRate(for: incoming.id), 1.0, accuracy: 0.001,
+            "Incoming 84 pair must begin at the 84 tempo on the seam, not the old 102 (rate would be \(Float(102.0/84.0)))")
+
+        audioManager.stopAllPlayers()
+    }
+
+    // MARK: - AutoDJ rotation count guarantee
+    //
+    // Locks the "play N sets at the selected tempo before switching" contract.
+    // The reported symptom was "it won't play 5 songs before switching"; these
+    // pin the exact count deterministically (no audio engine, no loop timing).
+
+    // Starting at 102 plays exactly swapsPerBPM sets at 102 before the master
+    // tempo advances — the entry pair plus (swapsPerBPM - 1) fresh swaps.
+    @MainActor
+    func testFiveSetsAtSelectedTempoBeforeSwitch() {
+        let rotation = AutoDJ.testBPMRotation          // [84, 94, 102]
+        let perBPM = AutoDJ.testSwapsPerBPM            // 5
+        let start = rotation.firstIndex(of: 102.0)!
+
+        // Simulate enough swaps to cover the first tempo plus the start of the
+        // next, so we can measure the leading run length.
+        let tempos = AutoDJ.simulatedSetTempos(startIndex: start, swaps: perBPM + 2)
+
+        let leadingAt102 = tempos.prefix { $0 == 102.0 }.count
+        XCTAssertEqual(leadingAt102, perBPM,
+            "Expected \(perBPM) sets at 102 before switching, got \(leadingAt102). Full timeline: \(tempos)")
+
+        // The set immediately after the run is the next tempo in rotation (84).
+        XCTAssertEqual(tempos[perBPM], 84.0,
+            "After \(perBPM) sets at 102 the rotation should advance to 84. Timeline: \(tempos)")
+    }
+
+    // Every tempo in a long run gets exactly swapsPerBPM consecutive sets,
+    // cycling through the rotation in order — no bucket is ever short- or
+    // over-counted, from any starting tempo.
+    @MainActor
+    func testEveryTempoGetsExactlySwapsPerBPMSets() {
+        let rotation = AutoDJ.testBPMRotation
+        let perBPM = AutoDJ.testSwapsPerBPM
+
+        for start in rotation.indices {
+            // 6 full rotations' worth of swaps.
+            let swaps = perBPM * rotation.count * 6
+            let tempos = AutoDJ.simulatedSetTempos(startIndex: start, swaps: swaps)
+
+            // Run-length encode the tempo timeline.
+            var runs: [(tempo: Double, count: Int)] = []
+            for t in tempos {
+                if let last = runs.last, last.tempo == t {
+                    runs[runs.count - 1].count += 1
+                } else {
+                    runs.append((t, 1))
+                }
+            }
+
+            // Ignore the final partial run (the simulation may stop mid-tempo).
+            for run in runs.dropLast() {
+                XCTAssertEqual(run.count, perBPM,
+                    "Tempo \(run.tempo) got \(run.count) sets, expected \(perBPM). Start=\(rotation[start]). Runs: \(runs)")
+            }
+
+            // Tempos advance in rotation order and wrap.
+            let runTempos = runs.map(\.tempo)
+            for i in 1..<runTempos.count {
+                let prevIdx = rotation.firstIndex(of: runTempos[i - 1])!
+                let expected = rotation[(prevIdx + 1) % rotation.count]
+                XCTAssertEqual(runTempos[i], expected,
+                    "Tempo went \(runTempos[i - 1]) → \(runTempos[i]); expected → \(expected). Start=\(rotation[start])")
+            }
+        }
+    }
+
 }
 
 // Helper extension for saving audio buffer to file

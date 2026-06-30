@@ -112,6 +112,36 @@ final class AutoDJ {
         persist()
     }
 
+    // MARK: - Rotation decision (pure)
+
+    /// The bucket/transition decision for a single swap. Pure and isolated
+    /// from loop timing + the audio engine so the "exactly `swapsPerBPM` sets
+    /// per tempo before the master BPM advances" invariant is unit-testable.
+    struct SwapDecision: Equatable {
+        /// True when this swap rolls the master tempo to the next BPM.
+        let isTransition: Bool
+        /// `bpmRotation` index the incoming pair is drawn from (and the master
+        /// tempo that pair ends up playing at once the wrap completes).
+        let pickIndex: Int
+        /// `bpmRotation` index the rotation lands on after a transition commit.
+        let nextIndex: Int
+    }
+
+    /// `swapsAtBPM` counts the non-transition swaps already completed at the
+    /// current BPM. Counting the entry pair as set 1, the rotation plays the
+    /// entry pair plus `swapsPerBPM - 1` fresh same-tempo swaps (sets 2…N),
+    /// and the swap that reaches `swapsPerBPM - 1` is the transition that
+    /// brings in the next tempo — i.e. exactly `swapsPerBPM` sets per tempo.
+    static func swapDecision(swapsAtBPM: Int,
+                             bpmIndex: Int,
+                             swapsPerBPM: Int = AutoDJ.swapsPerBPM,
+                             rotationCount: Int = AutoDJ.bpmRotation.count) -> SwapDecision {
+        let isTransition = swapsAtBPM >= swapsPerBPM - 1
+        let nextIndex = (bpmIndex + 1) % rotationCount
+        let pickIndex = isTransition ? nextIndex : bpmIndex
+        return SwapDecision(isTransition: isTransition, pickIndex: pickIndex, nextIndex: nextIndex)
+    }
+
     // MARK: - Main loop
 
     private func run() async {
@@ -176,9 +206,10 @@ final class AutoDJ {
             bpmIndex = idx
         }
 
-        let isTransition = swapsAtBPM >= Self.swapsPerBPM - 1
-        let nextIdx = (bpmIndex + 1) % Self.bpmRotation.count
-        let pickBPM = isTransition ? Self.bpmRotation[nextIdx] : audioManager.bpm
+        let decision = Self.swapDecision(swapsAtBPM: swapsAtBPM, bpmIndex: bpmIndex)
+        let isTransition = decision.isTransition
+        let nextIdx = decision.nextIndex
+        let pickBPM = Self.bpmRotation[decision.pickIndex]
         if isTransition { ensureSufficientPool(at: pickBPM) }
 
         // The pair being handed off IS whatever's playing right now —
@@ -198,6 +229,17 @@ final class AutoDJ {
             return
         }
 
+        // Tempo transition: a clean, sample-accurate seam, not a swap.
+        if isTransition {
+            await runTempoSeam(outgoing: outgoing, incoming: incoming, newBPM: pickBPM)
+            guard !Task.isCancelled, isEnabled else { return }
+            bpmIndex = nextIdx
+            swapsAtBPM = 0
+            persist()
+            return
+        }
+
+        // Same-tempo swap: DJ-style crossfade with a backspin + echo outro.
         for sample in incoming { await audioManager.addSampleToPlay(sample) }
         guard !Task.isCancelled, isEnabled else { return }
         markPlayed(incoming)
@@ -224,15 +266,37 @@ final class AutoDJ {
             audioManager.removeSampleFromPlay(sample)
         }
 
-        if isTransition {
-            bpmIndex = nextIdx
-            audioManager.bpm = Self.bpmRotation[bpmIndex]
-            swapsAtBPM = 0
-        } else {
-            swapsAtBPM += 1
-        }
-
+        swapsAtBPM += 1
         persist()
+    }
+
+    /// Tempo transition seam. The outgoing pair plays out to the exact end of
+    /// its current loop at the old tempo, then stops; the incoming pair (drawn
+    /// from the new BPM bucket) begins on that downbeat at the new tempo. No
+    /// fade-in, no backspin, no echo — the hard, grid-locked cut the user
+    /// wants only at the A→B seam. The incoming pair is pre-staged silently so
+    /// nothing sounds at the old tempo before the seam and there's no file-I/O
+    /// latency at the boundary.
+    private func runTempoSeam(outgoing: [Sample], incoming: [Sample], newBPM: Double) async {
+        for sample in incoming {
+            await audioManager.addSampleToPlay(sample, scheduleNow: false)
+        }
+        guard !Task.isCancelled, isEnabled else { return }
+        markPlayed(incoming)
+
+        // Get within scheduling range of the seam, then commit. `untilSeam` is
+        // captured before the commit rolls the master clock onto the new loop.
+        await waitUntilSecondsBeforeLoopEnd(0.4)
+        guard !Task.isCancelled, isEnabled else { return }
+
+        let untilSeam = loopRemainingSeconds()
+        audioManager.commitTempoSeam(outgoing: outgoing,
+                                     incoming: incoming,
+                                     newBPM: newBPM,
+                                     volume: Self.targetVolume)
+
+        // Hold past the seam so the next cycle measures against the new loop.
+        try? await Task.sleep(for: .seconds(untilSeam + 0.05))
     }
 
     // MARK: - Pool management
@@ -318,3 +382,35 @@ final class AutoDJ {
         }
     }
 }
+
+// MARK: - Test hooks
+
+#if DEBUG
+extension AutoDJ {
+    static var testSwapsPerBPM: Int { swapsPerBPM }
+    static var testBPMRotation: [Double] { bpmRotation }
+
+    /// The master tempo of each audible set across `swaps` swaps, starting
+    /// from `startIndex` and counting the entry pair already playing as the
+    /// first set. Pure mirror of the `runSwapCycle` rotation — same
+    /// `swapDecision`, same commit rules — so tests can assert the
+    /// "5 sets per tempo before it switches" guarantee without audio or
+    /// loop timing.
+    static func simulatedSetTempos(startIndex: Int, swaps: Int) -> [Double] {
+        var bpmIndex = startIndex
+        var swapsAtBPM = 0
+        var tempos: [Double] = [bpmRotation[bpmIndex]]   // entry set (set 1)
+        for _ in 0..<swaps {
+            let decision = swapDecision(swapsAtBPM: swapsAtBPM, bpmIndex: bpmIndex)
+            tempos.append(bpmRotation[decision.pickIndex])
+            if decision.isTransition {
+                bpmIndex = decision.nextIndex
+                swapsAtBPM = 0
+            } else {
+                swapsAtBPM += 1
+            }
+        }
+        return tempos
+    }
+}
+#endif

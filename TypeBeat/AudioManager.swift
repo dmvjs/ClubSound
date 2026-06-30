@@ -270,7 +270,12 @@ final class AudioManager {
         return elapsed.truncatingRemainder(dividingBy: masterLoopDuration) / masterLoopDuration
     }
 
-    func addSampleToPlay(_ sample: Sample) async {
+    /// Adds a sample to the mix. When `scheduleNow` is false the sample is
+    /// loaded and wired into the graph muted but NOT started — used to
+    /// pre-stage a tempo-seam pair so it can be launched sample-accurately at
+    /// the seam (via `commitTempoSeam`) instead of bleeding in at the old
+    /// tempo.
+    func addSampleToPlay(_ sample: Sample, scheduleNow: Bool = true) async {
         // Enforce the 4-sample limit + dedup at the audio layer so views can't
         // diverge from engine state.
         guard activeSamples.count < Self.maxSimultaneousSamples,
@@ -324,8 +329,80 @@ final class AudioManager {
         playing[sample.id] = entry
         applyRate(to: entry)
 
-        if isPlaying {
+        if isPlaying && scheduleNow {
             schedulePhaseAligned(entry: entry)
+        }
+    }
+
+    /// Sample-accurate tempo seam — the magical-when-perfect transition.
+    ///
+    /// `incoming` must already be pre-staged via
+    /// `addSampleToPlay(_:scheduleNow: false)`: loaded, wired, and silent.
+    /// This schedules it to begin exactly on the next loop boundary at
+    /// `newBPM` (frame 0, looping, full `volume` — no fade), while `outgoing`
+    /// keeps playing at the OLD tempo until that boundary and is then cut.
+    /// No backspin, no echo, no crossfade: A ends at the end of its loop, B
+    /// starts on the downbeat at its tempo, like rescheduling on the Web Audio
+    /// clock.
+    func commitTempoSeam(outgoing: [Sample], incoming: [Sample], newBPM: Double, volume: Float) {
+        guard let startSample = masterStartSample,
+              let renderTime = engine.outputNode.lastRenderTime,
+              renderTime.isSampleTimeValid else {
+            // No live clock to align to — fall back to an immediate hard
+            // switch so the rotation still advances.
+            for sample in outgoing { instantStopAndRemove(sample) }
+            bpm = newBPM
+            for sample in incoming {
+                setVolume(for: sample, volume: volume)
+                if let entry = playing[sample.id] { schedulePhaseAligned(entry: entry) }
+            }
+            return
+        }
+
+        // The next loop boundary, in the engine's sample clock.
+        let now = renderTime.sampleTime
+        let loopFrames = masterLoopDuration * sampleRate
+        let loopsCompleted = (Double(now - startSample) / loopFrames).rounded(.down)
+        let seamSample = startSample + AVAudioFramePosition((loopsCompleted + 1) * loopFrames)
+        let secondsUntilSeam = max(0, Double(seamSample - now) / sampleRate)
+        let seamTime = AVAudioTime(hostTime: renderTime.hostTime
+            + AVAudioTime.hostTime(forSeconds: secondsUntilSeam))
+
+        // Protect the outgoing pair from the upcoming bpm change: it must keep
+        // the OLD tempo until the seam (adjustAllPlaybackRates skips removing
+        // IDs).
+        for sample in outgoing { removingSampleIDs.insert(sample.id) }
+
+        // Launch incoming exactly on the seam downbeat at the NEW tempo. Rate
+        // is set explicitly (not via master bpm, which is still the old tempo)
+        // so the pair is at its target tempo the instant it sounds.
+        for sample in incoming {
+            guard let entry = playing[sample.id] else { continue }
+            let rate = Float(newBPM / sample.bpm)
+            if pitchLock {
+                entry.varispeed.rate = 1.0
+                entry.timePitch.rate = rate
+            } else {
+                entry.varispeed.rate = rate
+                entry.timePitch.rate = 1.0
+            }
+            entry.timePitch.pitch = 0.0
+            entry.player.scheduleBuffer(entry.buffer, at: seamTime, options: [.loops], completionHandler: nil)
+            entry.player.play()
+            setVolume(for: sample, volume: volume)   // silent until seamTime renders
+        }
+
+        // At the seam: cut the outgoing pair and roll the master clock + tempo
+        // onto the new loop. Done together so loopProgress stays on the old
+        // grid until the exact moment B takes over.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(secondsUntilSeam))
+            guard let self, self.isPlaying else { return }
+            for sample in outgoing { self.instantStopAndRemove(sample) }
+            self.suppressRestartOnBpmChange = true
+            self.bpm = newBPM
+            self.suppressRestartOnBpmChange = false
+            self.masterStartSample = seamSample
         }
     }
 
@@ -549,7 +626,13 @@ final class AudioManager {
     }
 
     private func adjustAllPlaybackRates() {
-        for entry in playing.values {
+        // Skip samples mid-removal (backspin/echo tail). They're still in the
+        // graph so the engine can render their outro, but their rate is driven
+        // by the backspin envelope (or is irrelevant for an instant cut) — a
+        // tempo change must not yank them to the new master rate, or an
+        // outgoing pair would audibly render at the new tempo during its tail.
+        // Matches the removingSampleIDs filter in startAllPlayersInSync.
+        for entry in playing.values where !removingSampleIDs.contains(entry.sample.id) {
             applyRate(to: entry)
         }
     }
@@ -668,6 +751,10 @@ extension AudioManager {
 
     func getSampleRate(for sampleId: Int) -> Float {
         playing[sampleId]?.varispeed.rate ?? 0
+    }
+
+    func isPlayerStarted(for sampleId: Int) -> Bool {
+        playing[sampleId]?.player.isPlaying ?? false
     }
 }
 #endif
