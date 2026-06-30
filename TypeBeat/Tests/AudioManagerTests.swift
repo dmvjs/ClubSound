@@ -42,6 +42,11 @@ class AudioManagerTests: XCTestCase {
     
     override func setUp() async throws {
         audioManager = AudioManager.shared
+        // Disable the AutoDJ scheduler first: it defaults to enabled and, once
+        // playback runs past its first swap window (~40s), it would swap the
+        // playing samples / change tempo out from under a sync or drift test.
+        // The isEnabled didSet cancels its in-flight task.
+        audioManager.autoDJ.isEnabled = false
         // Full reset, not just stopAllPlayers: the manager is a shared
         // singleton, and stopAllPlayers intentionally preserves the mix, so
         // active samples would otherwise accumulate across tests until the
