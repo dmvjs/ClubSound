@@ -75,13 +75,15 @@ final class AudioManager {
     /// Maximum number of simultaneously playing samples.
     static let maxSimultaneousSamples = 4
 
-    private let beatsPerBar = 4.0
-    private let totalBars = 16.0
+    /// Every sample is a 16-bar / 64-beat loop. This is the single source of
+    /// truth for that length: the master loop clock, the phase math, and the
+    /// load-time buffer normalization all derive from it.
+    static let beatsPerLoop = 4.0 * 16.0
     /// Seconds per master loop iteration (64 beats at the current tempo).
     /// Internal so AutoDJ and NowPlayingCoordinator can compute remaining
     /// time and elapsed-playback positions against the same clock.
     var masterLoopDuration: TimeInterval {
-        beatsPerBar * totalBars * 60.0 / bpm
+        Self.beatsPerLoop * 60.0 / bpm
     }
 
     /// AutoDJ scheduler — owns the auto-mix toggle, hamiltonian rotation
@@ -140,6 +142,12 @@ final class AudioManager {
         let timePitch: AVAudioUnitTimePitch
         let delay: AVAudioUnitDelay
         let buffer: AVAudioPCMBuffer
+        /// Buffer frame the player was scheduled to begin at. 0 for a clean
+        /// loop start; the phase-aligned slice offset when a sample is dropped
+        /// in mid-loop. `player.playerTime` counts from the player's own start,
+        /// so this offset is added back to recover the true musical loop
+        /// position (used by the phase diagnostics / tests).
+        var startBufferFrame: AVAudioFramePosition = 0
     }
 
     private init() {
@@ -235,6 +243,7 @@ final class AudioManager {
         playing.removeAll()
         activeSamples.removeAll()
         volumes.removeAll()
+        removingSampleIDs.removeAll()
     }
 
     private func setupAudioSession() {
@@ -389,6 +398,7 @@ final class AudioManager {
             entry.timePitch.pitch = 0.0
             entry.player.scheduleBuffer(entry.buffer, at: seamTime, options: [.loops], completionHandler: nil)
             entry.player.play()
+            playing[sample.id]?.startBufferFrame = 0
             setVolume(for: sample, volume: volume)   // silent until seamTime renders
         }
 
@@ -427,12 +437,45 @@ final class AudioManager {
             }
             do {
                 try file.read(into: buffer)
-                return buffer
+                return normalizedLoop(buffer, bpm: sample.bpm)
             } catch {
                 print("Failed to read \(sample.fileName): \(error)")
                 return nil
             }
         }.value
+    }
+
+    /// Conforms a decoded loop to its exact musical length: 64 beats at the
+    /// sample's native BPM. Source files drift a few tens of milliseconds off
+    /// (encoder padding, imprecise edits), and the small per-file mismatch is
+    /// what lets two looping players slide out of phase over minutes. Pinning
+    /// every buffer to the exact 64-beat frame count means that at any master
+    /// tempo each sample's effective loop equals the master loop to within one
+    /// frame, so plain `.loops` playback stays phase-locked indefinitely — no
+    /// re-sync timer, no per-loop reschedule. Over-length buffers are trimmed
+    /// (dropping only the loop tail); short ones are zero-padded.
+    nonisolated private static func normalizedLoop(_ buffer: AVAudioPCMBuffer,
+                                                   bpm: Double) -> AVAudioPCMBuffer {
+        let target = AVAudioFrameCount((beatsPerLoop * 60.0 / bpm * buffer.format.sampleRate).rounded())
+        guard target > 0, target != buffer.frameLength else { return buffer }
+
+        if target < buffer.frameLength {
+            buffer.frameLength = target          // trim the tail in place
+            return buffer
+        }
+
+        // Shorter than a full loop — pad with trailing silence.
+        guard let padded = AVAudioPCMBuffer(pcmFormat: buffer.format, frameCapacity: target),
+              let src = buffer.floatChannelData,
+              let dst = padded.floatChannelData else { return buffer }
+        let channels = Int(buffer.format.channelCount)
+        let copied = Int(buffer.frameLength)
+        for ch in 0..<channels {
+            dst[ch].update(from: src[ch], count: copied)
+            dst[ch].advanced(by: copied).update(repeating: 0, count: Int(target) - copied)
+        }
+        padded.frameLength = target
+        return padded
     }
 
     /// Drops a newly-added player into the running graph phase-aligned with the
@@ -467,9 +510,11 @@ final class AudioManager {
             // Play the in-phase remainder of the current loop, then loop normally.
             player.scheduleBuffer(slice, at: start.time, completionHandler: nil)
             player.scheduleBuffer(buffer, at: nil, options: [.loops], completionHandler: nil)
+            playing[entry.sample.id]?.startBufferFrame = frameOffset
         } else {
             // Either at a loop boundary, or buffer-slice fell through — start clean.
             player.scheduleBuffer(buffer, at: start.time, options: [.loops], completionHandler: nil)
+            playing[entry.sample.id]?.startBufferFrame = 0
         }
         player.play()
     }
@@ -661,6 +706,7 @@ final class AudioManager {
         }
         for entry in live {
             entry.player.scheduleBuffer(entry.buffer, at: start.time, options: [.loops], completionHandler: nil)
+            playing[entry.sample.id]?.startBufferFrame = 0
         }
         for entry in live {
             entry.player.play()
@@ -738,15 +784,32 @@ extension AudioManager {
         Float(bpm / sample.bpm)
     }
 
+    /// Beat-phase (0..<1 within a beat) of a playing sample, derived from the
+    /// player's own buffer position — NOT from the engine output clock.
+    ///
+    /// The earlier implementation subtracted `masterStartSample` (engine-output
+    /// clock, e.g. 48 kHz) from `player.lastRenderTime.sampleTime`, which counts
+    /// buffer frames consumed (buffer rate, e.g. 44.1 kHz, and scaled by the
+    /// per-sample varispeed rate). Mixing those clocks made two samples at
+    /// different tempos diverge by construction even when perfectly in sync.
+    ///
+    /// `playerTime(forNodeTime:)` gives the player's frames-played in the
+    /// buffer's own sample rate; modulo the buffer length (plus the scheduled
+    /// start offset) that is the true musical loop position, identical across
+    /// tempos for synced samples. Scaling by the 64-beat loop yields beat-phase.
     func getSamplePhase(for sampleId: Int) -> Double {
         guard let entry = playing[sampleId],
-              let playerTime = entry.player.lastRenderTime,
-              let startSample = masterStartSample,
+              let nodeTime = entry.player.lastRenderTime,
+              nodeTime.isSampleTimeValid,
+              let playerTime = entry.player.playerTime(forNodeTime: nodeTime),
               playerTime.isSampleTimeValid else { return 0 }
 
-        let elapsed = Double(playerTime.sampleTime - startSample) / sampleRate
-        let beatsPerSecond = bpm / 60.0
-        return (elapsed * beatsPerSecond).truncatingRemainder(dividingBy: 1.0)
+        let bufferFrames = Double(entry.buffer.frameLength)
+        guard bufferFrames > 0 else { return 0 }
+
+        let framesPlayed = Double(playerTime.sampleTime + entry.startBufferFrame)
+        let loopPhase = framesPlayed.truncatingRemainder(dividingBy: bufferFrames) / bufferFrames
+        return (loopPhase * Self.beatsPerLoop).truncatingRemainder(dividingBy: 1.0)
     }
 
     func getSampleRate(for sampleId: Int) -> Float {

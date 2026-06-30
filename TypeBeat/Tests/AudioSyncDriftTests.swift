@@ -7,12 +7,14 @@ class AudioSyncDriftTests: XCTestCase {
     
     override func setUp() async throws {
         audioManager = AudioManager.shared
-        audioManager.stopAllPlayers()
+        // Full reset so active samples don't leak across tests via the
+        // shared singleton (see AudioManagerTests.setUp for rationale).
+        audioManager.reset()
         try await Task.sleep(until: .now + .milliseconds(500))
     }
-    
+
     override func tearDown() async throws {
-        audioManager.stopAllPlayers()
+        audioManager.reset()
         try await Task.sleep(until: .now + .milliseconds(500))
     }
     
