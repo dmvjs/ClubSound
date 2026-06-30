@@ -57,4 +57,7 @@
 "language.change.title" = "言語変更の確認";
 "language.change.message" = "言語を変更するとアプリが再起動されます。続行しますか？";
 "language.change.cancel" = "キャンセル";
-"language.change.confirm" = "変更"; 
+"language.change.confirm" = "変更";
+
+// Auto mode
+"auto" = "自動";

@@ -12,7 +12,7 @@ struct MainVolumeControl: View {
                     .frame(width: 39, height: 39)
 
                 // Progress ring — driven by the display link while playing.
-                TimelineView(.animation(paused: !audioManager.isPlaying)) { _ in
+                TimelineView(.animation(minimumInterval: 0.05, paused: !audioManager.isPlaying)) { _ in
                     Circle()
                         .trim(from: 0, to: CGFloat(audioManager.loopProgress()))
                         .stroke(Color.accentColor, lineWidth: 2)

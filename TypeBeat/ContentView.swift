@@ -2,10 +2,22 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var audioManager: AudioManager
-    @State private var activeBPM: Double? = 84
+    /// Browse focus once playback has started. While stopped, the scrubber
+    /// reads from `audioManager.bpm` directly (see `browseBPM`) so picking a
+    /// section is equivalent to choosing the tempo for the next play.
+    @State private var activeBPM: Double = 84
     @State private var activeKey: MusicKey? = .C
 
     private static let maxButtonSize: CGFloat = 44
+
+    /// BPM that the right-edge index, key column, and scroll anchors track.
+    /// Locked to `audioManager.bpm` until playback starts — so scrubbing /
+    /// tapping a tempo also sets the tempo. Once `isPlaying` flips on it
+    /// holds an independent browse focus, letting the user navigate the
+    /// catalog without retuning live samples.
+    private var browseBPM: Double {
+        audioManager.isPlaying ? activeBPM : audioManager.bpm
+    }
 
     /// Samples grouped by BPM then key, both sorted. Derived from the static
     /// catalog so the work happens once per body evaluation regardless of
@@ -97,14 +109,14 @@ struct ContentView: View {
                             KeyIndexView(
                                 groupedSamples: groupedSamples,
                                 activeKey: activeKey,
-                                selectedBPM: activeBPM,
+                                selectedBPM: browseBPM,
                                 onSelection: { key in handleKeySelection(key, proxy) }
                             )
                             .zIndex(2)
 
                             BPMIndexView(
                                 groupedSamples: groupedSamples,
-                                activeBPM: activeBPM,
+                                activeBPM: browseBPM,
                                 onSelection: { bpm in handleBPMSelection(bpm, proxy) }
                             )
                             .zIndex(2)
@@ -117,16 +129,39 @@ struct ContentView: View {
                         .padding(.bottom, bottomReserveForScrubbers)
                     }
                     .background(Color.black)
+                    // While stopped, any BPM change (tempo button or scrubber)
+                    // also scrolls the list — `browseBPM` already follows
+                    // `audioManager.bpm` for the highlight, so this only owns
+                    // the imperative scroll.
+                    .onChange(of: audioManager.bpm) { _, newBPM in
+                        guard !audioManager.isPlaying,
+                              groupedSamples.contains(where: { abs($0.0 - newBPM) < 0.01 })
+                        else { return }
+                        withAnimation {
+                            proxy.scrollTo("\(Int(newBPM))", anchor: .top)
+                        }
+                    }
+                    // Seed the browse focus from the playback tempo at the
+                    // moment play starts, so the scrubber doesn't jump to a
+                    // stale value when the modes flip.
+                    .onChange(of: audioManager.isPlaying) { _, nowPlaying in
+                        if nowPlaying { activeBPM = audioManager.bpm }
+                    }
                 }
             }
         }
     }
 
     private func addToNowPlaying(sample: Sample) {
+        // Manual pick implicitly drops out of auto — the user taking the
+        // wheel is a clear signal they don't want the scheduler fighting
+        // them — but the pick itself still goes through.
+        if audioManager.autoDJ.isEnabled { audioManager.autoDJ.isEnabled = false }
         Task { await audioManager.addSampleToPlay(sample) }
     }
 
     private func removeFromNowPlaying(sample: Sample) {
+        if audioManager.autoDJ.isEnabled { audioManager.autoDJ.isEnabled = false }
         withAnimation {
             audioManager.removeSampleFromPlay(sample)
         }
@@ -149,9 +184,13 @@ struct ContentView: View {
     }
 
     private func handleBPMSelection(_ bpm: Double, _ proxy: ScrollViewProxy) {
-        withAnimation {
+        if audioManager.isPlaying {
             activeBPM = bpm
-            proxy.scrollTo("\(Int(bpm))", anchor: .top)
+            withAnimation { proxy.scrollTo("\(Int(bpm))", anchor: .top) }
+        } else {
+            // Drives the highlight (via `browseBPM`) and the scroll (via the
+            // onChange above) in one assignment.
+            audioManager.bpm = bpm
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
@@ -159,9 +198,7 @@ struct ContentView: View {
     private func handleKeySelection(_ key: MusicKey, _ proxy: ScrollViewProxy) {
         withAnimation {
             activeKey = key
-            if let bpm = activeBPM {
-                proxy.scrollTo("\(Int(bpm))-\(key.rawValue)", anchor: .top)
-            }
+            proxy.scrollTo("\(Int(browseBPM))-\(key.rawValue)", anchor: .top)
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
@@ -170,3 +207,5 @@ struct ContentView: View {
 #Preview {
     ContentView(audioManager: AudioManager.shared)
 }
+
+
