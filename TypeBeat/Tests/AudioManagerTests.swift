@@ -47,6 +47,11 @@ class AudioManagerTests: XCTestCase {
         // active samples would otherwise accumulate across tests until the
         // 4-sample cap silently rejects further additions.
         audioManager.reset()
+        // pitchLock is a user preference that reset() (rightly) leaves alone,
+        // so pin it to the default here — otherwise a prior test that enabled
+        // it leaks into the sync/drift tests, routing playback through the
+        // time-pitch vocoder (which doesn't hold sample-accurate loop phase).
+        audioManager.pitchLock = false
         try await Task.sleep(nanoseconds: 500_000_000) // Wait for cleanup
 
         // Setup audio session for testing

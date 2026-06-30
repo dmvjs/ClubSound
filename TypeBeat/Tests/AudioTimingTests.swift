@@ -10,6 +10,7 @@ class AudioTimingTests: XCTestCase {
         // Full reset so active samples don't leak across tests via the
         // shared singleton (see AudioManagerTests.setUp for rationale).
         audioManager.reset()
+        audioManager.pitchLock = false   // known mode; see AudioManagerTests.setUp
         try await Task.sleep(until: .now + .milliseconds(500))
     }
 
