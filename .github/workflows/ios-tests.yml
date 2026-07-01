@@ -17,7 +17,6 @@ jobs:
 
     env:
       SCHEME: TypeBeat
-      DESTINATION: "platform=iOS Simulator,name=iPhone 16,OS=latest"
 
     steps:
       - name: Checkout
@@ -32,6 +31,18 @@ jobs:
         run: |
           xcodebuild -version
           xcrun --sdk iphonesimulator --show-sdk-version
+
+      # Pin to a concrete simulator by UDID rather than a device name like
+      # "iPhone 16": the available device set changes with every Xcode bump
+      # (the iPhone 16 family vanished under Xcode 26), which broke the build
+      # before it ever reached the tests. Pick the first available iPhone.
+      - name: Select simulator
+        run: |
+          UDID=$(xcrun simctl list devices available --json \
+            | python3 -c 'import sys, json; devs = json.load(sys.stdin)["devices"]; cands = [d["udid"] for rt, ds in devs.items() if "iOS" in rt for d in ds if d["name"].startswith("iPhone")]; print(cands[0] if cands else "")')
+          if [ -z "$UDID" ]; then echo "No iPhone simulator available"; exit 1; fi
+          echo "Selected simulator UDID: $UDID"
+          echo "DESTINATION=platform=iOS Simulator,id=$UDID" >> "$GITHUB_ENV"
 
       - name: Build
         run: |

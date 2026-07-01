@@ -42,9 +42,23 @@ class AudioManagerTests: XCTestCase {
     
     override func setUp() async throws {
         audioManager = AudioManager.shared
-        audioManager.stopAllPlayers()
+        // Disable the AutoDJ scheduler first: it defaults to enabled and, once
+        // playback runs past its first swap window (~40s), it would swap the
+        // playing samples / change tempo out from under a sync or drift test.
+        // The isEnabled didSet cancels its in-flight task.
+        audioManager.autoDJ.isEnabled = false
+        // Full reset, not just stopAllPlayers: the manager is a shared
+        // singleton, and stopAllPlayers intentionally preserves the mix, so
+        // active samples would otherwise accumulate across tests until the
+        // 4-sample cap silently rejects further additions.
+        audioManager.reset()
+        // pitchLock is a user preference that reset() (rightly) leaves alone,
+        // so pin it to the default here — otherwise a prior test that enabled
+        // it leaks into the sync/drift tests, routing playback through the
+        // time-pitch vocoder (which doesn't hold sample-accurate loop phase).
+        audioManager.pitchLock = false
         try await Task.sleep(nanoseconds: 500_000_000) // Wait for cleanup
-        
+
         // Setup audio session for testing
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback)
@@ -55,9 +69,9 @@ class AudioManagerTests: XCTestCase {
     }
     
     override func tearDown() async throws {
-        audioManager.stopAllPlayers()
+        audioManager.reset()
         try await Task.sleep(nanoseconds: 500_000_000) // Wait for cleanup
-        
+
         // Clean up test audio file
         try? FileManager.default.removeItem(at: testAudioURL)
     }
@@ -182,14 +196,16 @@ class AudioManagerTests: XCTestCase {
         audioManager.pitchLock = true
         try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
         
-        // Get rate with pitch lock
+        // `getSampleRate` reports the varispeed rate. Under pitch lock the
+        // tempo change is moved onto the time-pitch unit (which preserves
+        // pitch) and varispeed is reset to 1.0 — so the varispeed rate is
+        // exactly 1.0 here, not 84/102. The time-pitch unit now carries the
+        // 84/102 stretch. (testTempoChanges asserts the same invariant.)
         let pitchLockedRate = audioManager.getSampleRate(for: sample.id)
-        print("Rate with pitch preservation: \(pitchLockedRate)")
-        
-        // The rate should still be the same - pitch lock doesn't change the rate
-        // It just preserves the pitch while playing at a different rate
-        XCTAssertEqual(pitchLockedRate, Float(84.0/102.0), accuracy: 0.001)
-        
+        print("Varispeed rate with pitch preservation: \(pitchLockedRate)")
+        XCTAssertEqual(pitchLockedRate, 1.0, accuracy: 0.001,
+                       "Under pitch lock the varispeed rate is 1.0; the stretch moves to the time-pitch unit")
+
         // We can't test the actual pitch preservation in a unit test
         // as that would require audio analysis
         print("✅ Pitch lock behavior is correct - rate is adjusted while pitch is preserved")

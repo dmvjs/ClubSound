@@ -15,8 +15,11 @@ import Observation
 final class AutoDJ {
     // MARK: - Tunable constants
 
-    private static let bpmRotation: [Double] = [84, 94, 102]
-    private static let swapsPerBPM: Int = 5
+    // nonisolated: immutable Sendable constants referenced from the pure
+    // swapDecision default arguments, which are evaluated in a nonisolated
+    // context.
+    nonisolated private static let bpmRotation: [Double] = [84, 94, 102]
+    nonisolated private static let swapsPerBPM: Int = 5
     private static let targetVolume: Float = 0.7
     private static let minPoolPerBPM: Int = 10
     private static let stateKey = "autoDJ.state"

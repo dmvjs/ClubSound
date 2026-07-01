@@ -7,12 +7,16 @@ class AudioTimingTests: XCTestCase {
     
     override func setUp() async throws {
         audioManager = AudioManager.shared
-        audioManager.stopAllPlayers()
+        // Stop the AutoDJ scheduler + full reset so neither background swaps nor
+        // leftover samples leak across tests (see AudioManagerTests.setUp).
+        audioManager.autoDJ.isEnabled = false
+        audioManager.reset()
+        audioManager.pitchLock = false   // known mode; see AudioManagerTests.setUp
         try await Task.sleep(until: .now + .milliseconds(500))
     }
-    
+
     override func tearDown() async throws {
-        audioManager.stopAllPlayers()
+        audioManager.reset()
         try await Task.sleep(until: .now + .milliseconds(500))
     }
     

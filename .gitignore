@@ -4,3 +4,6 @@
 # Tied to a single developer's machine; should not be in version control.
 xcuserdata/
 *.xcuserstate
+
+# Local build / derived-data output (e.g. xcodebuild -derivedDataPath build).
+build/
