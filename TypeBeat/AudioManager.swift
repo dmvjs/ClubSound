@@ -78,7 +78,9 @@ final class AudioManager {
     /// Every sample is a 16-bar / 64-beat loop. This is the single source of
     /// truth for that length: the master loop clock, the phase math, and the
     /// load-time buffer normalization all derive from it.
-    static let beatsPerLoop = 4.0 * 16.0
+    // nonisolated so the nonisolated buffer-loading path (normalizedLoop) can
+    // read it; it's an immutable Sendable constant, safe from any context.
+    nonisolated static let beatsPerLoop = 4.0 * 16.0
     /// Seconds per master loop iteration (64 beats at the current tempo).
     /// Internal so AutoDJ and NowPlayingCoordinator can compute remaining
     /// time and elapsed-playback positions against the same clock.
